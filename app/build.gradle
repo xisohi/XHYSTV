@@ -7,13 +7,13 @@ android {
         applicationId 'com.github.tvbox.osc'
         minSdkVersion 16
         targetSdkVersion 26
-        versionCode 230714
-        versionName '23.07.14'
+        versionCode 230717
+        versionName '23.07.17'
         multiDexEnabled true
         //设置room的Schema的位置
         javaCompileOptions {
             annotationProcessorOptions {
-                arguments = ["room.schemaLocation": "$projectDir/schemas".toString()]
+                arguments = ["room.schemaLocation": "$projectDir/schemas"。toString()]
             }
         }
     }
