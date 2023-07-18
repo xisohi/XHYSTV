@@ -13,7 +13,7 @@ android {
         //设置room的Schema的位置
         javaCompileOptions {
             annotationProcessorOptions {
-                arguments = ["room.schemaLocation": "$projectDir/schemas".toString()]
+                arguments = ["room.schemaLocation": "$projectDir/schemas"。toString()]
             }
         }
     }
@@ -59,7 +59,7 @@ android {
 }
 
 dependencies {
-    api fileTree(dir: "libs"， include: ["*.jar"])
+    api fileTree(dir: "libs", include: ["*.jar"])
 
 
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
