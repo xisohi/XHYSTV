@@ -37,20 +37,8 @@
         android:text="本软件只提供聚合展示功能，所有资源来自网上, 软件不参与任何制作, 上传, 储存, 下载等内容. 软件仅供学习参考, 请于安装后24小时内删除。\n\n打包分发请保留出处\nhttps://github.com/CatVodTVOfficial/TVBoxOSC\nhttps://github.com/xisohi/XHYS(TV)"
         android:textColor="@color/color_CC000000"
         android:textSize="@dimen/ts_22" />
-    <TextView
-        android:id="@+id/xupdate"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:layout_marginStart="@dimen/vs_5"
-        android:layout_marginLeft="@dimen/vs_5"
-        android:layout_weight="1"
-        android:background="@drawable/button_dialog_main"
-        android:focusable="true"
-        android:gravity="center"
-        android:padding="@dimen/vs_10"
-        android:text="系统更新"
-        android:textColor="@color/color_FFFFFF"
-        android:textSize="@dimen/ts_22" />
+
+
+    </LinearLayout>
 
 </LinearLayout>

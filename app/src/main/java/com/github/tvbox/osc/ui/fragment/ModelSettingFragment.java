@@ -27,6 +27,7 @@ import com.github.tvbox.osc.ui.dialog.BackupDialog;
 import com.github.tvbox.osc.ui.dialog.SearchRemoteTvDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.XWalkInitDialog;
+import com.github.tvbox.osc.ui.xupdate.Constants;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
@@ -39,6 +40,7 @@ import com.lzy.okgo.callback.FileCallback;
 import com.lzy.okgo.model.Progress;
 import com.lzy.okgo.model.Response;
 import com.orhanobut.hawk.Hawk;
+import com.xuexiang.xupdate.easy.EasyUpdate;
 
 import org.greenrobot.eventbus.EventBus;
 import org.jetbrains.annotations.NotNull;
@@ -162,6 +164,16 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 FastClickCheckUtil.check(v);
                 AboutDialog dialog = new AboutDialog(mActivity);
                 dialog.show();
+            }
+        });
+
+        findViewById(R.id.btn_Xupdate).setOnClickListener(view -> {
+            switch (view.getId()) {
+                case R.id.btn_Xupdate:
+                    EasyUpdate.checkUpdate(getContext(), Constants.UPDATE_DEFAULT_URL);
+                    break;
+                default:
+                    break;
             }
         });
         findViewById(R.id.llWp).setOnClickListener(new View.OnClickListener() {
