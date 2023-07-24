@@ -1081,14 +1081,15 @@
                             android:focusable="true"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
-                            android:paddingLeft="@dimen/vs_20"
-                            android:paddingRight="@dimen/vs_20">
+                            android:paddingLeft="@dimen/vs_5"
+                            android:paddingRight="@dimen/vs_5">
 
                             <Button
                                 android:id="@+id/btn_Xupdate"
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="系统更新" />
+                                android:text="系统升级"
+                                android:textSize="@dimen/ts_24"/>
 
 
                         </LinearLayout>
