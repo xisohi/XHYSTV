@@ -2,7 +2,8 @@ package com.github.tvbox.osc.base;
 
 import android.app.Activity;
 import androidx.multidex.MultiDexApplication;
-
+import com.github.tvbox.osc.util.LOG;
+import com.github.tvbox.osc.util.RemoteConfig;
 import com.github.tvbox.osc.bean.VodInfo;
 import com.github.tvbox.osc.callback.EmptyCallback;
 import com.github.tvbox.osc.callback.LoadingCallback;
@@ -12,7 +13,6 @@ import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.EpgUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
-import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.PlayerHelper;
 import com.github.tvbox.osc.util.js.JSEngine;
@@ -38,6 +38,7 @@ public class App extends MultiDexApplication {
     public void onCreate() {
         super.onCreate();
         instance = this;
+        RemoteConfig.Init(this);
         initParams();
         // OKGo
         OkGoHelper.init(); //台标获取

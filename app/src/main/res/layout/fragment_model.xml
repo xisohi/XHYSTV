@@ -1074,11 +1074,11 @@
                                 android:textSize="@dimen/ts_30" />
                         </LinearLayout>
                         <LinearLayout
-                            android:id="@+id/btn_Xupdate"
+                            android:id="@+id/llUpdate"
                             android:layout_width="@dimen/vs_0"
                             android:layout_height="match_parent"
-                            android:layout_marginStart="@dimen/vs_5"
-                            android:layout_marginLeft="@dimen/vs_5"
+                            android:layout_marginEnd="@dimen/vs_5"
+                            android:layout_marginRight="@dimen/vs_5"
                             android:layout_weight="1"
                             android:background="@drawable/shape_setting_model_focus"
                             android:focusable="true"
@@ -1090,7 +1090,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="系统升级"
+                                android:text="升级"
                                 android:textColor="@android:color/white"
                                 android:textSize="@dimen/ts_24" />
 
@@ -1098,12 +1098,6 @@
                                 android:layout_width="0dp"
                                 android:layout_height="wrap_content"
                                 android:layout_weight="1" />
-
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:textColor="@android:color/white"
-                                android:textSize="@dimen/ts_24" />
 
                             <TextView
                                 android:layout_width="wrap_content"

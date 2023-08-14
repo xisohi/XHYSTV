@@ -7,8 +7,8 @@ android {
         applicationId 'com.github.tvbox.osc'
         minSdkVersion 16
         targetSdkVersion 26
-        versionCode 230806
-        versionName '23.08.06'
+        versionCode 1
+        versionName '1.0.0'
         multiDexEnabled true
         //设置room的Schema的位置
         javaCompileOptions {
@@ -70,20 +70,6 @@ dependencies {
     implementation 'androidx.recyclerview:recyclerview:1.2.1'
     implementation files('libs/thunder.jar')
     implementation files('libs/commons-lang3-3.12.0.jar')
-    implementation 'com.github.xuexiangjys:XUpdate:2.1.4'
-    implementation 'com.github.xuexiangjys.XUpdateAPI:xupdate-easy:1.0.1' 
-// 如果需要使用断点续传下载功能的话添加该依赖（可选） 
-    implementation 'com.github.xuexiangjys.XUpdateAPI:xupdate-downloader-aria:1.0.1'
-    implementation 'com.github.xuexiangjys.XAOP:xaop-runtime:1.1.0'
-    implementation 'com.github.xuexiangjys.XUtil:xutil-core:2.0.0'
-    implementation 'com.github.xuexiangjys.XUtil:xutil-sub:2.0.0'
-    implementation 'com.github.xuexiangjys.XPage:xpage-lib:3.2.0'
-    annotationProcessor 'com.github.xuexiangjys.XPage:xpage-compiler:3.2.0'
-    implementation 'com.jakewharton:butterknife:10.1.0'
-    annotationProcessor 'com.jakewharton:butterknife-compiler:10.1.0'
-
-
-
 
     implementation 'com.squareup.okhttp3:okhttp:3.12.11'
     annotationProcessor 'androidx.room:room-compiler:2.3.0'
