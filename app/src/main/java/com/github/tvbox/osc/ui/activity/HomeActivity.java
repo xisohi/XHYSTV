@@ -46,6 +46,7 @@ import com.github.tvbox.osc.ui.tv.widget.DefaultTransformer;
 import com.github.tvbox.osc.ui.tv.widget.FixedSpeedScroller;
 import com.github.tvbox.osc.ui.tv.widget.NoScrollViewPager;
 import com.github.tvbox.osc.ui.tv.widget.ViewObj;
+import com.github.tvbox.osc.ui.xupdate.Constants;
 import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.DefaultConfig;
 import com.github.tvbox.osc.util.HawkConfig;
@@ -55,6 +56,7 @@ import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
 import com.owen.tvrecyclerview.widget.V7GridLayoutManager;
 import com.owen.tvrecyclerview.widget.V7LinearLayoutManager;
+import com.xuexiang.xupdate.XUpdate;
 
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
@@ -471,6 +473,9 @@ public class HomeActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
         mHandler.post(mRunnable);
+
+        // 检查更新
+        update();
     }
 
 
@@ -495,6 +500,15 @@ public class HomeActivity extends BaseActivity {
                 showFilterIcon((int) event.obj);
             }
         }
+    }
+
+    /**
+     * 检查更新
+     */
+    public void update() {
+        XUpdate.newBuild(this.mContext)
+                .updateUrl(Constants.UPDATE_DEFAULT_URL)
+                .update();
     }
 
     private void showFilterIcon(int count) {
