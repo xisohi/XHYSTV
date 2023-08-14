@@ -214,7 +214,7 @@ public class UpdateDialog extends BaseDialog  {
             progressBar.setVisibility(View.VISIBLE);
             progressBarText.setVisibility(View.VISIBLE);
             this.setCancelable(false);
-            OkGo.<File>get(download_path).tag("down_apk").execute(new FileCallback(context.getExternalFilesDir("downloads").getAbsolutePath(), MD5.encode(NewVersion)+".tapk") {
+            OkGo.<File>get(download_path).tag("down_apk").execute(new FileCallback(getDiskCachePath(context), MD5.encode(NewVersion)+".tapk") {
                 @Override
                 public void onStart(Request<File, ? extends Request> request) {
                     showToast("更新开始下载...");
@@ -258,11 +258,23 @@ public class UpdateDialog extends BaseDialog  {
                 public void onError(Response<File> response) {
                     LOG.i("更新下载失败...");
                     super.onError(response);
-                    showToast("当前网络不可用，请检查网络设置");
+                    //showToast("当前网络不可用，请检查网络设置");
+                    showToast(response.getException().getMessage());
                 }
             });
         } else {
             showToast("SD卡没有插好");
+        }
+    }
+
+    /**
+     * 获取cache路径
+     */
+    public static String getDiskCachePath(Context context) {
+        if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState()) || !Environment.isExternalStorageRemovable()) {
+            return context.getExternalCacheDir().getPath();
+        } else {
+            return context.getCacheDir().getPath();
         }
     }
     //下载成功后自动安装apk并打开
