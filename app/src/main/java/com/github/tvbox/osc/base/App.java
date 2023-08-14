@@ -1,6 +1,11 @@
 package com.github.tvbox.osc.base;
 
+import static com.xuexiang.xupdate.entity.UpdateError.ERROR.CHECK_NO_NEW_VERSION;
+
 import android.app.Activity;
+import android.content.Context;
+import android.os.Environment;
+
 import androidx.multidex.MultiDexApplication;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.RemoteConfig;
@@ -9,6 +14,7 @@ import com.github.tvbox.osc.callback.EmptyCallback;
 import com.github.tvbox.osc.callback.LoadingCallback;
 import com.github.tvbox.osc.data.AppDataManager;
 import com.github.tvbox.osc.server.ControlManager;
+import com.github.tvbox.osc.ui.xupdate.UpdateHttpService;
 import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.EpgUtil;
 import com.github.tvbox.osc.util.FileUtils;
@@ -17,8 +23,13 @@ import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.PlayerHelper;
 import com.github.tvbox.osc.util.js.JSEngine;
 import com.kingja.loadsir.core.LoadSir;
+import com.lzy.okgo.OkGo;
 import com.orhanobut.hawk.Hawk;
 import com.p2p.P2PClass;
+import com.xuexiang.xupdate.XUpdate;
+import com.xuexiang.xupdate.entity.UpdateError;
+import com.xuexiang.xupdate.listener.OnUpdateFailureListener;
+import com.xuexiang.xupdate.utils.UpdateUtils;
 
 import me.jessyan.autosize.AutoSizeConfig;
 import me.jessyan.autosize.unit.Subunits;
@@ -41,6 +52,7 @@ public class App extends MultiDexApplication {
         RemoteConfig.Init(this);
         initParams();
         // OKGo
+        OkGo.getInstance().init(instance);
         OkGoHelper.init(); //台标获取
         EpgUtil.init();
         // 初始化Web服务器
@@ -58,6 +70,7 @@ public class App extends MultiDexApplication {
         PlayerHelper.init();
         JSEngine.getInstance().create();
         FileUtils.cleanPlayerCache();
+        initUpdate();
     }
 
     private void initParams() {
@@ -80,6 +93,55 @@ public class App extends MultiDexApplication {
         }
         if (!Hawk.contains(HawkConfig.SEARCH_VIEW)) {
             Hawk.put(HawkConfig.SEARCH_VIEW, 2);
+        }
+    }
+
+
+    /**
+     * 初始化更新组件服务
+     */
+    private void initUpdate() {
+        XUpdate.get()
+                .debug(false)
+                //默认设置只在wifi下检查版本更新
+                .isWifiOnly(false)
+                //默认设置使用get请求检查版本
+                .isGet(true)
+                //默认设置非自动模式，可根据具体使用配置
+                .isAutoMode(false)
+//                .setApkCacheDir("/storage/sdcard0/Android/data/ta.hai/files")
+                .setApkCacheDir(getDiskCachePath(instance))
+                //设置默认公共请求参数
+                .param("VersionCode", UpdateUtils.getVersionCode(this))
+                .param("VersionName", getPackageName())
+                //设置版本更新出错的监听
+                .setOnUpdateFailureListener(new OnUpdateFailureListener() {
+                    @Override
+                    public void onFailure(UpdateError error) {
+                        error.printStackTrace();
+                        // 对不同错误进行处理
+                        if (error.getCode() != CHECK_NO_NEW_VERSION) {
+//                            ToastUtils.showShort(application,error.toString() + "");
+                        }
+                    }
+                })
+                //设置是否支持静默安装，默认是true
+                .supportSilentInstall(true)
+                //这个必须设置！实现网络请求功能。
+                .setIUpdateHttpService(new UpdateHttpService())
+                //这个必须初始化
+                .init(this);
+
+    }
+
+    /**
+     * 获取cache路径
+     */
+    public static String getDiskCachePath(Context context) {
+        if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState()) || !Environment.isExternalStorageRemovable()) {
+            return context.getExternalCacheDir().getPath();
+        } else {
+            return context.getCacheDir().getPath();
         }
     }
 

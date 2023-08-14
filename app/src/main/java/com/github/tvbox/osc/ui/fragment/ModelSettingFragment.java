@@ -28,6 +28,7 @@ import com.github.tvbox.osc.ui.dialog.SearchRemoteTvDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.UpdateDialog;
 import com.github.tvbox.osc.ui.dialog.XWalkInitDialog;
+import com.github.tvbox.osc.ui.xupdate.Constants;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
@@ -40,7 +41,7 @@ import com.lzy.okgo.callback.FileCallback;
 import com.lzy.okgo.model.Progress;
 import com.lzy.okgo.model.Response;
 import com.orhanobut.hawk.Hawk;
-
+import com.xuexiang.xupdate.XUpdate;
 
 import org.greenrobot.eventbus.EventBus;
 import org.jetbrains.annotations.NotNull;
@@ -167,14 +168,12 @@ public class ModelSettingFragment extends BaseLazyFragment {
             }
         });
 
-        findViewById(R.id.llUpdate).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                FastClickCheckUtil.check(v);
-//               UpdateDialog dialog = new UpdateDialog(mActivity);
-//                dialog.show();
-                UpdateDialog.checkUpdate(mActivity, false);
-            }
+        findViewById(R.id.llUpdate).setOnClickListener(view -> {
+                    update();
+//                    FastClickCheckUtil.check(view);
+////               UpdateDialog dialog = new UpdateDialog(mActivity);
+////                dialog.show();
+//                    UpdateDialog.checkUpdate(mActivity, false);
         });
         findViewById(R.id.llWp).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -697,6 +696,14 @@ public class ModelSettingFragment extends BaseLazyFragment {
         return;
     }
 
+    /**
+     * 检查更新
+     */
+    public void update() {
+        XUpdate.newBuild(this.mContext)
+                .updateUrl(Constants.UPDATE_DEFAULT_URL)
+                .update();
+    }
 
     public static SearchRemoteTvDialog loadingSearchRemoteTvDialog;
     public static List<String> remoteTvHostList;
