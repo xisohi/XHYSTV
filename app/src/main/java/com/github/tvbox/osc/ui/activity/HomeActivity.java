@@ -266,6 +266,8 @@ public class HomeActivity extends BaseActivity {
             tvName.setText(home.getName());
         if (dataInitOk && jarInitOk) {
             showLoading();
+            // 检查更新
+            update();
             sourceViewModel.getSort(ApiConfig.get().getHomeSourceBean().getKey());
             if (hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 LOG.e("有");
@@ -473,9 +475,6 @@ public class HomeActivity extends BaseActivity {
     protected void onResume() {
         super.onResume();
         mHandler.post(mRunnable);
-
-        // 检查更新
-        update();
     }
 
 
@@ -483,6 +482,13 @@ public class HomeActivity extends BaseActivity {
     protected void onPause() {
         super.onPause();
         mHandler.removeCallbacksAndMessages(null);
+    }
+
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        // 检查更新
+        update();
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -506,7 +512,7 @@ public class HomeActivity extends BaseActivity {
      * 检查更新
      */
     public void update() {
-        XUpdate.newBuild(this.mContext)
+        XUpdate.newBuild(this)
                 .updateUrl(Constants.UPDATE_DEFAULT_URL)
                 .update();
     }
