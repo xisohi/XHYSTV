@@ -27,9 +27,9 @@ public class RemoteConfig {
     public static void Init(Context mContext){
         RemoteConfig.mContext = mContext;
         if (ToolUtils.isApkInDebug(mContext)){
-            remoteUrl = "https://gitee.com/xisohi/XHYSosc/raw/master/XHYSTVupdate.json";
+            remoteUrl = "https://gitee.com/xisohi/XHYSosc/raw/master/XHYSTVupdate.txt";
         }else{
-            remoteUrl = "https://gitee.com/xisohi/XHYSosc/raw/master/XHYSTVupdate.json";
+            remoteUrl = "https://gitee.com/xisohi/XHYSosc/raw/master/XHYSTVupdate.ini";
         }
         LOG.e("RemoteConfig",
                 ToolUtils.isApkInDebug(mContext) ? "当前处于【调试】模式":"当前处于【正式】模式",
