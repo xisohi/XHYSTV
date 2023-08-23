@@ -44,6 +44,7 @@ public class App extends MultiDexApplication {
 
     private static P2PClass p;
     public static String burl;
+    private static String dashData;
 
     @Override
     public void onCreate() {
@@ -178,5 +179,12 @@ public class App extends MultiDexApplication {
 
     public Activity getCurrentActivity() {
         return AppManager.getInstance().currentActivity();
+    }
+
+    public void setDashData(String data) {
+        dashData = data;
+    }
+    public String getDashData() {
+        return dashData;
     }
 }
