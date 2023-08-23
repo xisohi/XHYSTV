@@ -2,7 +2,7 @@ package com.github.tvbox.osc.util;
 
 import android.content.Context;
 import android.os.Bundle;
-
+import com.github.tvbox.osc.ui.xupdate.Constants;
 import com.github.tvbox.osc.base.BaseActivity;
 import com.github.tvbox.osc.ui.activity.HomeActivity;
 import com.github.tvbox.osc.ui.dialog.UpdateDialog;
@@ -27,9 +27,9 @@ public class RemoteConfig {
     public static void Init(Context mContext){
         RemoteConfig.mContext = mContext;
         if (ToolUtils.isApkInDebug(mContext)){
-            remoteUrl = "https://gitee.com/xisohi/XHYSosc/raw/master/XHYSTVupdate.txt";
+            remoteUrl = "https://gitee.com/xisohi/XHYSosc/raw/master/XHYSTVupdate.json";
         }else{
-            remoteUrl = "https://gitee.com/xisohi/XHYSosc/raw/master/XHYSTVupdate.ini";
+            remoteUrl = "https://gitee.com/xisohi/XHYSosc/raw/master/XHYSTVupdate.json";
         }
         LOG.e("RemoteConfig",
                 ToolUtils.isApkInDebug(mContext) ? "当前处于【调试】模式":"当前处于【正式】模式",
