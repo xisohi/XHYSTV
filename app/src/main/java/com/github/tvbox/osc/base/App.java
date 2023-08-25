@@ -145,7 +145,9 @@ public class App extends MultiDexApplication {
      */
     public static String getDiskCachePath(Context context) {
         if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState()) || !Environment.isExternalStorageRemovable()) {
-            return context.getExternalCacheDir().getPath();
+//            return context.getExternalCacheDir().getPath();
+            return context.getCacheDir().getPath();
+            //针对小米电视6.0.1需要获取存储权限的设置
         } else {
             return context.getCacheDir().getPath();
         }
