@@ -526,6 +526,7 @@ public class HomeActivity extends BaseActivity {
                 .updateUrl(Constants.UPDATE_DEFAULT_URL)
                 //.isAutoMode(true) // 自动下载，不会弹出窗口，下载完后会进入系统安装界面，类似强制安装，未完成安装打开应用可能会重复进入安装界面
                 //.supportBackgroundUpdate(false)// 后台下载按钮
+                .updatePrompter(new CustomUpdatePrompter())// 自定义提示界面
                 .update();
     }
 
