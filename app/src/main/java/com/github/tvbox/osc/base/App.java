@@ -22,6 +22,7 @@ import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.EpgUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
+import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.PlayerHelper;
 import com.github.tvbox.osc.util.ToolUtils;
@@ -34,6 +35,8 @@ import com.xuexiang.xupdate.XUpdate;
 import com.xuexiang.xupdate.entity.UpdateError;
 import com.xuexiang.xupdate.listener.OnUpdateFailureListener;
 import com.xuexiang.xupdate.utils.UpdateUtils;
+
+import com.whl.quickjs.android.QuickJSLoader;
 
 import me.jessyan.autosize.AutoSizeConfig;
 import me.jessyan.autosize.unit.Subunits;
@@ -58,7 +61,8 @@ public class App extends MultiDexApplication {
         initParams();
         // OKGo
         OkGo.getInstance().init(instance);
-        OkGoHelper.init(); //台标获取
+        OkGoHelper.init();
+        //台标获取
         EpgUtil.init();
         // 初始化Web服务器
         ControlManager.init(this);
@@ -73,13 +77,12 @@ public class App extends MultiDexApplication {
                 .setSupportSP(false)
                 .setSupportSubunits(Subunits.MM);
         PlayerHelper.init();
-        JSEngine.getInstance().create();
+        QuickJSLoader.init();
         FileUtils.cleanPlayerCache();
         initUpdate();
     }
 
     private void initParams() {
-
         // Hawk
         Hawk.init(this).build();
         Hawk.put(HawkConfig.DEBUG_OPEN, false);
@@ -160,7 +163,6 @@ public class App extends MultiDexApplication {
         super.onTerminate();
         JSEngine.getInstance().destroy();
     }
-
 
     private VodInfo vodInfo;
     public void setVodInfo(VodInfo vodinfo){
