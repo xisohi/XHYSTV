@@ -169,10 +169,6 @@ public class ModelSettingFragment extends BaseLazyFragment {
 
         findViewById(R.id.llUpdate).setOnClickListener(view -> {
                     update();
-//                    FastClickCheckUtil.check(view);
-////               UpdateDialog dialog = new UpdateDialog(mActivity);
-////                dialog.show();
-//                    UpdateDialog.checkUpdate(mActivity, false);
         });
         findViewById(R.id.llWp).setOnClickListener(new View.OnClickListener() {
             @Override

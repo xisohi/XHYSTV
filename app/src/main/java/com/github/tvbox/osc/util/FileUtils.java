@@ -8,7 +8,6 @@ import com.github.tvbox.osc.base.App;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -16,11 +15,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
-import java.math.BigDecimal;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.io.OutputStreamWriter;
 
 public class FileUtils {
 
@@ -80,22 +74,6 @@ public class FileUtils {
         file.delete();
     }
 
-    public static void appendFile(File file, String content) {
-        BufferedWriter out = null;
-        try {
-            out = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(file, true)));
-            out.write(content);
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            try {
-                out.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
     public static String readFileToString(String path, String charsetName) {
         // 定义返回结果
         String jsonString = "";
