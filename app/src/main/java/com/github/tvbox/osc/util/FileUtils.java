@@ -1,19 +1,9 @@
 package com.github.tvbox.osc.util;
 
-import android.content.Context;
 import android.os.Environment;
 import android.text.TextUtils;
-import android.util.Base64;
 
 import com.github.tvbox.osc.base.App;
-import com.github.tvbox.osc.server.ControlManager;
-
-
-import com.orhanobut.hawk.Hawk;
-import com.google.gson.Gson;
-import com.google.gson.JsonObject;
-
-import org.json.JSONObject;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;

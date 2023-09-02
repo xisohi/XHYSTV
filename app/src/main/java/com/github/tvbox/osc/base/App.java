@@ -1,7 +1,5 @@
 package com.github.tvbox.osc.base;
 
-import static com.xuexiang.xupdate.entity.UpdateError.ERROR.CHECK_NO_NEW_VERSION;
-
 import android.app.Activity;
 import android.content.Context;
 import android.os.Environment;
@@ -11,7 +9,6 @@ import androidx.multidex.MultiDexApplication;
 
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.util.LOG;
-import com.github.tvbox.osc.util.RemoteConfig;
 import com.github.tvbox.osc.bean.VodInfo;
 import com.github.tvbox.osc.callback.EmptyCallback;
 import com.github.tvbox.osc.callback.LoadingCallback;
@@ -22,10 +19,8 @@ import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.EpgUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
-import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.PlayerHelper;
-import com.github.tvbox.osc.util.ToolUtils;
 import com.github.tvbox.osc.util.js.JSEngine;
 import com.kingja.loadsir.core.LoadSir;
 import com.lzy.okgo.OkGo;
@@ -55,10 +50,8 @@ public class App extends MultiDexApplication {
     public void onCreate() {
         super.onCreate();
         instance = this;
-        RemoteConfig.Init(this);
         initParams();
         // OKGo
-        OkGo.getInstance().init(instance);
         OkGoHelper.init(); //台标获取
         EpgUtil.init();
         // 初始化Web服务器
