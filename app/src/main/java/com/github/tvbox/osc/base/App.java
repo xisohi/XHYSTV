@@ -36,8 +36,6 @@ import com.xuexiang.xupdate.entity.UpdateError;
 import com.xuexiang.xupdate.listener.OnUpdateFailureListener;
 import com.xuexiang.xupdate.utils.UpdateUtils;
 
-import com.whl.quickjs.android.QuickJSLoader;
-
 import me.jessyan.autosize.AutoSizeConfig;
 import me.jessyan.autosize.unit.Subunits;
 
@@ -61,8 +59,7 @@ public class App extends MultiDexApplication {
         initParams();
         // OKGo
         OkGo.getInstance().init(instance);
-        OkGoHelper.init();
-        //台标获取
+        OkGoHelper.init(); //台标获取
         EpgUtil.init();
         // 初始化Web服务器
         ControlManager.init(this);
@@ -77,7 +74,7 @@ public class App extends MultiDexApplication {
                 .setSupportSP(false)
                 .setSupportSubunits(Subunits.MM);
         PlayerHelper.init();
-        QuickJSLoader.init();
+        JSEngine.getInstance().create();
         FileUtils.cleanPlayerCache();
         initUpdate();
     }
