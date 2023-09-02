@@ -52,6 +52,7 @@ public class App extends MultiDexApplication {
         instance = this;
         initParams();
         // OKGo
+        OkGo.getInstance().init(instance);
         OkGoHelper.init(); //台标获取
         EpgUtil.init();
         // 初始化Web服务器
