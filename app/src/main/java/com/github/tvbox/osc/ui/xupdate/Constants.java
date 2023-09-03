@@ -23,12 +23,12 @@ package com.github.tvbox.osc.ui.xupdate;
  */
 public final class Constants {
 
-    public static final String UPDATE_DEFAULT_URL = "https://raw.githubusercontent.com/xisohi/TVBoxOSC/master/XHYSTVupdate.json";
+    public static final String UPDATE_DEFAULT_URL = "https://agit.ai/xisohi/TVBoxOSC/raw/branch/master/XHYSTVupdate.json";
 
     // 更新服务域名
     public static final String UPDATE_URL = "http://xxx.xxx";
 
-    public static final String UPDATE_FORCE_URL = "https://gitee.com/xuexiangjys/XUpdate/raw/master/jsonapi/update_forced.json";
+    public static final String UPDATE_FORCE_URL = "https://raw.githubusercontent.com/xisohi/TVBoxOSC/master/XHYSTVupdate.json";
 
-    public static final String UPDATE_DOWNLOAD_URL = "https://gitee.com/xuexiangjys/Resource/raw/master/jsonapi/download_test.json";
+    public static final String UPDATE_DOWNLOAD_URL = "https://agit.ai/xisohi/TVBoxOSC/raw/branch/master/XHYSTVupdate.json";
 }
