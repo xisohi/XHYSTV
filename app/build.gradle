@@ -1,14 +1,14 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 30
+    compileSdkVersion 33
 
     defaultConfig {
         applicationId 'com.github.tvbox.osc'
-        minSdkVersion 16
+        minSdkVersion 18
         targetSdkVersion 26
-        versionCode 230903
-        versionName '23.09.03'
+        versionCode 231013
+        versionName '23.10.13'
         multiDexEnabled true
         //设置room的Schema的位置
         javaCompileOptions {
@@ -59,7 +59,7 @@ android {
 }
 
 dependencies {
-    api fileTree(dir: "libs", include: ["*.jar"])
+    api fileTree(dir: "libs", include: ['*.jar', '*.aar'])
 
 
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
@@ -74,6 +74,7 @@ dependencies {
     // 更新 XUpdate
     implementation 'com.github.xuexiangjys:XUpdate:2.1.4'
 
+    implementation 'org.conscrypt:conscrypt-android:2.5.2'
     implementation 'com.squareup.okhttp3:okhttp:3.12.11'
     annotationProcessor 'androidx.room:room-compiler:2.3.0'
     implementation 'androidx.room:room-runtime:2.3.0'
@@ -91,8 +92,9 @@ dependencies {
     implementation 'com.orhanobut:hawk:2.0.1'
 
     implementation project(":player")
-    implementation project(":quickjs")
+    //implementation project(":quickjs")
 
+    implementation 'net.sourceforge.streamsupport:android-retrofuture:1.7.4'
     implementation('org.xwalk:xwalk_shared_library:23.53.589.4') {
         exclude group: 'com.android.support'
     }
