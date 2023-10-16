@@ -6,6 +6,7 @@ import android.animation.AnimatorSet;
 import android.animation.IntEvaluator;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
@@ -52,6 +53,9 @@ import com.github.tvbox.osc.util.DefaultConfig;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
+import com.hjq.permissions.OnPermissionCallback;
+import com.hjq.permissions.Permission;
+import com.hjq.permissions.XXPermissions;
 import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
 import com.owen.tvrecyclerview.widget.V7GridLayoutManager;
@@ -266,8 +270,8 @@ public class HomeActivity extends BaseActivity {
             tvName.setText(home.getName());
         if (dataInitOk && jarInitOk) {
             showLoading();
-            // 检查更新
-            update();
+            // 检查权限 后 检查更新
+            checkPermissions();
             sourceViewModel.getSort(ApiConfig.get().getHomeSourceBean().getKey());
             if (hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 LOG.e("有");
@@ -497,8 +501,8 @@ public class HomeActivity extends BaseActivity {
     @Override
     protected void onRestart() {
         super.onRestart();
-        // 检查更新
-        update();
+        // 检查权限 后 检查更新
+        checkPermissions();
     }
 
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -528,6 +532,40 @@ public class HomeActivity extends BaseActivity {
                 //.supportBackgroundUpdate(false)// 后台下载按钮
                 .updatePrompter(new CustomUpdatePrompter())// 自定义提示界面
                 .update();
+    }
+
+    /**
+     * 检查权限 后 检查更新
+     */
+    public void checkPermissions() {
+        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
+            //Toast.makeText(this, "已获得存储权限", Toast.LENGTH_SHORT).show();
+            // 更新
+            update();
+        } else {
+            XXPermissions.with(this)
+                    .permission(Permission.Group.STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(List<String> permissions, boolean all) {
+                            if (all) {
+                                //Toast.makeText(mContext, "已获得存储权限", Toast.LENGTH_SHORT).show();
+                                // 更新
+                                update();
+                            }
+                        }
+
+                        @Override
+                        public void onDenied(List<String> permissions, boolean never) {
+                            if (never) {
+                                Toast.makeText(mContext, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
+                                XXPermissions.startPermissionActivity((Activity) mContext, permissions);
+                            } else {
+                                Toast.makeText(mContext, "获取存储权限失败", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+        }
     }
 
     private void showFilterIcon(int count) {
