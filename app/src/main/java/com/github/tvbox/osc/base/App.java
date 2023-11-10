@@ -1,37 +1,37 @@
 package com.github.tvbox.osc.base;
 
+import com.github.tvbox.osc.ui.xupdate.UpdateHttpService;
+import com.xuexiang.xupdate.XUpdate;
+import com.xuexiang.xupdate.entity.UpdateError;
+import com.xuexiang.xupdate.listener.OnUpdateFailureListener;
+import com.xuexiang.xupdate.utils.UpdateUtils;
+import com.lzy.okgo.OkGo;
+
 import android.app.Activity;
 import android.content.Context;
 import android.os.Environment;
 import android.widget.Toast;
-
-import androidx.multidex.MultiDexApplication;
-
 import com.github.tvbox.osc.R;
-import com.github.tvbox.osc.util.LOG;
+import androidx.multidex.MultiDexApplication;
 import com.github.catvod.crawler.JsLoader;
 import com.github.tvbox.osc.bean.VodInfo;
 import com.github.tvbox.osc.callback.EmptyCallback;
 import com.github.tvbox.osc.callback.LoadingCallback;
 import com.github.tvbox.osc.data.AppDataManager;
 import com.github.tvbox.osc.server.ControlManager;
-import com.github.tvbox.osc.ui.xupdate.UpdateHttpService;
 import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.EpgUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
+import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.PlayerHelper;
 
 import com.kingja.loadsir.core.LoadSir;
-import com.lzy.okgo.OkGo;
 import com.orhanobut.hawk.Hawk;
 import com.p2p.P2PClass;
 import com.whl.quickjs.android.QuickJSLoader;
-import com.xuexiang.xupdate.XUpdate;
-import com.xuexiang.xupdate.entity.UpdateError;
-import com.xuexiang.xupdate.listener.OnUpdateFailureListener;
-import com.xuexiang.xupdate.utils.UpdateUtils;
+
 
 import me.jessyan.autosize.AutoSizeConfig;
 import me.jessyan.autosize.unit.Subunits;
