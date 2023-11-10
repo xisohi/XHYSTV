@@ -1,12 +1,18 @@
 package com.github.tvbox.osc.ui.activity;
 
+import android.app.Activity;
+import com.github.tvbox.osc.ui.xupdate.Constants;
+import com.hjq.permissions.OnPermissionCallback;
+import com.hjq.permissions.Permission;
+import com.hjq.permissions.XXPermissions;
+import com.xuexiang.xupdate.XUpdate;
+import com.github.tvbox.osc.ui.xupdate.CustomUpdatePrompter;
 import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorSet;
 import android.animation.IntEvaluator;
 import android.animation.ObjectAnimator;
 import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
@@ -47,21 +53,16 @@ import com.github.tvbox.osc.ui.tv.widget.DefaultTransformer;
 import com.github.tvbox.osc.ui.tv.widget.FixedSpeedScroller;
 import com.github.tvbox.osc.ui.tv.widget.NoScrollViewPager;
 import com.github.tvbox.osc.ui.tv.widget.ViewObj;
-import com.github.tvbox.osc.ui.xupdate.Constants;
 import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.DefaultConfig;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
-import com.hjq.permissions.OnPermissionCallback;
-import com.hjq.permissions.Permission;
-import com.hjq.permissions.XXPermissions;
 import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
 import com.owen.tvrecyclerview.widget.V7GridLayoutManager;
 import com.owen.tvrecyclerview.widget.V7LinearLayoutManager;
-import com.xuexiang.xupdate.XUpdate;
-import com.github.tvbox.osc.ui.xupdate.CustomUpdatePrompter;
+
 import org.greenrobot.eventbus.EventBus;
 import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
@@ -497,14 +498,12 @@ public class HomeActivity extends BaseActivity {
         super.onPause();
         mHandler.removeCallbacksAndMessages(null);
     }
-
     @Override
     protected void onRestart() {
         super.onRestart();
         // 检查权限 后 检查更新
         checkPermissions();
     }
-
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void refresh(RefreshEvent event) {
         if (event.type == RefreshEvent.TYPE_PUSH_URL) {
@@ -521,7 +520,6 @@ public class HomeActivity extends BaseActivity {
             }
         }
     }
-
     /**
      * 检查更新
      */
@@ -567,7 +565,6 @@ public class HomeActivity extends BaseActivity {
                     });
         }
     }
-
     private void showFilterIcon(int count) {
         boolean visible = count > 0;
         currentView.findViewById(R.id.tvFilterColor).setVisibility(visible ? View.VISIBLE : View.GONE);
