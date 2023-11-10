@@ -1,12 +1,5 @@
 package com.github.tvbox.osc.ui.activity;
 
-import android.app.Activity;
-import com.github.tvbox.osc.ui.xupdate.Constants;
-import com.hjq.permissions.OnPermissionCallback;
-import com.hjq.permissions.Permission;
-import com.hjq.permissions.XXPermissions;
-import com.xuexiang.xupdate.XUpdate;
-import com.github.tvbox.osc.ui.xupdate.CustomUpdatePrompter;
 import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorSet;
@@ -271,8 +264,6 @@ public class HomeActivity extends BaseActivity {
             tvName.setText(home.getName());
         if (dataInitOk && jarInitOk) {
             showLoading();
-            // 检查权限 后 检查更新
-            checkPermissions();
             sourceViewModel.getSort(ApiConfig.get().getHomeSourceBean().getKey());
             if (hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 LOG.e("有");
@@ -292,7 +283,7 @@ public class HomeActivity extends BaseActivity {
                             @Override
                             public void run() {
                                 if (!useCacheConfig)
-                                    Toast.makeText(HomeActivity.this, "配置文件加载成功", Toast.LENGTH_SHORT).show();
+                                    Toast.makeText(HomeActivity.this, "自定义jar加载成功", Toast.LENGTH_SHORT).show();
                                 initData();
                             }
                         }, 50);
@@ -309,7 +300,7 @@ public class HomeActivity extends BaseActivity {
                         mHandler.post(new Runnable() {
                             @Override
                             public void run() {
-                                Toast.makeText(HomeActivity.this, "配置文件加载失败", Toast.LENGTH_SHORT).show();
+                                Toast.makeText(HomeActivity.this, "jar加载失败", Toast.LENGTH_SHORT).show();
                                 initData();
                             }
                         });
@@ -482,7 +473,8 @@ public class HomeActivity extends BaseActivity {
             super.onBackPressed();
         } else {
             mExitTime = System.currentTimeMillis();
-            Toast.makeText(mContext, "再按一次返回键退出应用", Toast.LENGTH_SHORT).show();            
+            Toast.makeText(mContext, "再按一次返回键退出应用", Toast.LENGTH_SHORT).show();
+            showEmpty();
         }
     }
 
@@ -498,12 +490,7 @@ public class HomeActivity extends BaseActivity {
         super.onPause();
         mHandler.removeCallbacksAndMessages(null);
     }
-    @Override
-    protected void onRestart() {
-        super.onRestart();
-        // 检查权限 后 检查更新
-        checkPermissions();
-    }
+
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void refresh(RefreshEvent event) {
         if (event.type == RefreshEvent.TYPE_PUSH_URL) {
@@ -520,51 +507,7 @@ public class HomeActivity extends BaseActivity {
             }
         }
     }
-    /**
-     * 检查更新
-     */
-    public void update() {
-        XUpdate.newBuild(this)
-                .updateUrl(Constants.UPDATE_DEFAULT_URL)
-                //.isAutoMode(true) // 自动下载，不会弹出窗口，下载完后会进入系统安装界面，类似强制安装，未完成安装打开应用可能会重复进入安装界面
-                //.supportBackgroundUpdate(false)// 后台下载按钮
-                .updatePrompter(new CustomUpdatePrompter())// 自定义提示界面
-                .update();
-    }
 
-    /**
-     * 检查权限 后 检查更新
-     */
-    public void checkPermissions() {
-        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
-            //Toast.makeText(this, "已获得存储权限", Toast.LENGTH_SHORT).show();
-            // 更新
-            update();
-        } else {
-            XXPermissions.with(this)
-                    .permission(Permission.Group.STORAGE)
-                    .request(new OnPermissionCallback() {
-                        @Override
-                        public void onGranted(List<String> permissions, boolean all) {
-                            if (all) {
-                                //Toast.makeText(mContext, "已获得存储权限", Toast.LENGTH_SHORT).show();
-                                // 更新
-                                update();
-                            }
-                        }
-
-                        @Override
-                        public void onDenied(List<String> permissions, boolean never) {
-                            if (never) {
-                                Toast.makeText(mContext, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
-                                XXPermissions.startPermissionActivity((Activity) mContext, permissions);
-                            } else {
-                                Toast.makeText(mContext, "获取存储权限失败", Toast.LENGTH_SHORT).show();
-                            }
-                        }
-                    });
-        }
-    }
     private void showFilterIcon(int count) {
         boolean visible = count > 0;
         currentView.findViewById(R.id.tvFilterColor).setVisibility(visible ? View.VISIBLE : View.GONE);
