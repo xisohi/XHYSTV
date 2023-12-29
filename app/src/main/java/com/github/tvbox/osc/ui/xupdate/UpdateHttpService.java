@@ -33,6 +33,7 @@ public class UpdateHttpService implements IUpdateHttpService {
 //        Log.e("XUpdate", "asyncGet--- " + url);
 
         OkGo.getInstance().<String>get(url)
+                .tag(url)                    // 请求的 tag, 主要用于取消对应的请求
                 .cacheMode(CacheMode.DEFAULT)
                 .params(transform(params))
                 .execute(new StringCallback() {
@@ -55,6 +56,7 @@ public class UpdateHttpService implements IUpdateHttpService {
     public void asyncPost(@NonNull String url, @NonNull Map<String, Object> params, final @NonNull Callback callBack) {
         //Log.e("XUpdate", "asyncPost--- " + url);
         OkGo.getInstance().<String>post(url)
+                .tag(url)                    // 请求的 tag, 主要用于取消对应的请求
                 .cacheMode(CacheMode.DEFAULT)
                 .params(transform(params))
                 .execute(new StringCallback() {
@@ -124,6 +126,7 @@ public class UpdateHttpService implements IUpdateHttpService {
 
     @Override
     public void cancelDownload(@NonNull String url) {
+        //Log.e("XHYSTV", "cancelDownload: " + url);
         OkGo.getInstance().cancelTag(url);
     }
 
