@@ -27,6 +27,8 @@ import com.github.tvbox.osc.ui.dialog.BackupDialog;
 import com.github.tvbox.osc.ui.dialog.SearchRemoteTvDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.XWalkInitDialog;
+import com.github.tvbox.osc.ui.xupdate.Constants;
+import com.github.tvbox.osc.ui.xupdate.CustomUpdatePrompter;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
@@ -39,6 +41,7 @@ import com.lzy.okgo.callback.FileCallback;
 import com.lzy.okgo.model.Progress;
 import com.lzy.okgo.model.Response;
 import com.orhanobut.hawk.Hawk;
+import com.xuexiang.xupdate.XUpdate;
 
 import org.greenrobot.eventbus.EventBus;
 import org.jetbrains.annotations.NotNull;
@@ -661,6 +664,17 @@ public class ModelSettingFragment extends BaseLazyFragment {
 
         findViewById(R.id.llIjkCachePlay).setOnClickListener((view -> onClickIjkCachePlay(view)));
         findViewById(R.id.llClearCache).setOnClickListener((view -> onClickClearCache(view)));
+        // Update 检查更新
+        findViewById(R.id.llUpdate).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                FastClickCheckUtil.check(v);
+                XUpdate.newBuild(getContext()) // 使用 getContext() 获取上下文
+                        .updateUrl(Constants.UPDATE_DEFAULT_URL)
+                        .updatePrompter(new CustomUpdatePrompter()) // 自定义提示界面
+                        .update();
+            }
+        });
     }
 
     private void onClickIjkCachePlay(View v) {
