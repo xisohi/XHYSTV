@@ -87,7 +87,8 @@ dependencies {
     }
     implementation 'org.greenrobot:eventbus:3.2.0'
     implementation 'com.orhanobut:hawk:2.0.1'
-
+    // 更新 XUpdate
+    implementation 'com.github.xuexiangjys:XUpdate:2.1.5'
     implementation project(":player")
     implementation project(":quickjs")
 

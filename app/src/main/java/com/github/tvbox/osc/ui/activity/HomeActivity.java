@@ -18,7 +18,7 @@ import android.view.animation.BounceInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-
+import android.app.Activity;
 import androidx.annotation.NonNull;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.lifecycle.Observer;
@@ -68,7 +68,12 @@ import java.util.Date;
 import java.util.List;
 
 import me.jessyan.autosize.utils.AutoSizeUtils;
-
+import com.github.tvbox.osc.ui.xupdate.Constants;
+import com.github.tvbox.osc.ui.xupdate.CustomUpdatePrompter;
+import com.hjq.permissions.OnPermissionCallback;
+import com.hjq.permissions.Permission;
+import com.hjq.permissions.XXPermissions;
+import com.xuexiang.xupdate.XUpdate;
 public class HomeActivity extends BaseActivity {
     private LinearLayout topLayout;
     private LinearLayout contentLayout;
@@ -120,6 +125,8 @@ public class HomeActivity extends BaseActivity {
             useCacheConfig = bundle.getBoolean("useCache", false);
         }
         initData();
+        // 检查权限 后 检查更新
+        checkPermissions();
     }
 
     private void initView() {
@@ -657,6 +664,51 @@ public class HomeActivity extends BaseActivity {
                 }
             }, sites, sites.indexOf(ApiConfig.get().getHomeSourceBean()));
             dialog.show();
+        }
+    }
+    /**
+     * 检查更新
+     */
+    public void update() {
+        XUpdate.newBuild(this)
+                .updateUrl(Constants.UPDATE_DEFAULT_URL)
+                //.isAutoMode(true) // 自动下载，不会弹出窗口，下载完后会进入系统安装界面，类似强制安装，未完成安装打开应用可能会重复进入安装界面
+                //.supportBackgroundUpdate(true)// 后台下载按钮
+                .updatePrompter(new CustomUpdatePrompter())// 自定义提示界面
+                .update();
+    }
+
+    /**
+     * 检查权限 后 检查更新
+     */
+    public void checkPermissions() {
+        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
+            //Toast.makeText(this, "已获得存储权限", Toast.LENGTH_SHORT).show();
+            // 更新
+            update();
+        } else {
+            XXPermissions.with(this)
+                    .permission(Permission.Group.STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(List<String> permissions, boolean all) {
+                            if (all) {
+                                //Toast.makeText(mContext, "已获得存储权限", Toast.LENGTH_SHORT).show();
+                                // 更新
+                                update();
+                            }
+                        }
+
+                        @Override
+                        public void onDenied(List<String> permissions, boolean never) {
+                            if (never) {
+                                Toast.makeText(mContext, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
+                                XXPermissions.startPermissionActivity((Activity) mContext, permissions);
+                            } else {
+                                Toast.makeText(mContext, "获取存储权限失败", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
         }
     }
 }
