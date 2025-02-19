@@ -2,6 +2,9 @@ package com.github.tvbox.osc.util;
 
 import android.graphics.Bitmap;
 
+import androidx.annotation.NonNull;
+
+import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.base.App;
 import com.github.tvbox.osc.picasso.MyOkhttpDownLoader;
 import com.github.tvbox.osc.util.SSL.SSLSocketFactoryCompat;
@@ -13,10 +16,14 @@ import com.orhanobut.hawk.Hawk;
 import com.squareup.picasso.Picasso;
 
 import java.io.File;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
-import java.util.concurrent.PriorityBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
@@ -24,11 +31,13 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Cache;
+import okhttp3.Dns;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.dnsoverhttps.DnsOverHttps;
 import okhttp3.internal.Version;
 import xyz.doikki.videoplayer.exo.ExoMediaSourceHelper;
+
 
 public class OkGoHelper {
     public static final long DEFAULT_MILLISECONDS = 8000;      //默认的超时时间
@@ -56,7 +65,9 @@ public class OkGoHelper {
         } catch (Throwable th) {
             th.printStackTrace();
         }
-        builder.dns(dnsOverHttps);
+
+//        builder.dns(dnsOverHttps);
+        builder.dns(new CustomDns());
 
         ExoMediaSourceHelper.getInstance(App.getInstance()).setOkClient(builder.build());
     }
@@ -64,6 +75,9 @@ public class OkGoHelper {
     public static DnsOverHttps dnsOverHttps = null;
 
     public static ArrayList<String> dnsHttpsList = new ArrayList<>();
+
+    public static boolean is_doh = false;
+    public static Map<String, String> myHosts = null;
 
 
     public static String getDohUrl(int type) {
@@ -112,9 +126,54 @@ public class OkGoHelper {
         builder.cache(new Cache(new File(App.getInstance().getCacheDir().getAbsolutePath(), "dohcache"), 100 * 1024 * 1024));
         OkHttpClient dohClient = builder.build();
         String dohUrl = getDohUrl(Hawk.get(HawkConfig.DOH_URL, 0));
-        dnsOverHttps = new DnsOverHttps.Builder().client(dohClient).url(dohUrl.isEmpty() ? null : HttpUrl.get(dohUrl)).build();
+        if (!dohUrl.isEmpty()) is_doh = true;
+        dnsOverHttps = new DnsOverHttps.Builder()
+                .client(dohClient)
+                .url(dohUrl.isEmpty() ? null : HttpUrl.get(dohUrl))
+                .build();
     }
 
+    // 自定义 DNS 解析器
+    static class CustomDns implements Dns {
+        @NonNull
+        @Override
+        public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
+            if (myHosts == null)myHosts = ApiConfig.get().getMyHost(); //确保只获取一次减少消耗
+            // 判断输入是否为 IP 地址
+            if (isValidIpAddress(hostname)) {
+                return Collections.singletonList(InetAddress.getByName(hostname));
+            } else {
+                if(!myHosts.isEmpty() && myHosts.containsKey(hostname))hostname=myHosts.get(hostname);
+                assert hostname != null;
+//                return (is_doh?dnsOverHttps:Dns.SYSTEM).lookup(hostname);
+                return (dnsOverHttps).lookup(hostname);
+            }
+        }
+
+        //简单判断减少开销
+        private boolean isValidIpAddress(String str) {
+            // 处理 IPv4 地址的判断
+            if (str.indexOf('.') > 0)return isValidIPv4(str);
+            // 处理 IPv6 地址的判断
+            if (str.indexOf(':') > 0)return true;
+            return false;
+        }
+
+        private boolean isValidIPv4(String str) {
+            String[] parts = str.split("\\.");
+            // IPv4 地址必须有 4 个部分
+            if (parts.length != 4)return false;
+            // 检查每一部分是否是 0-255 的数字
+            for (String part : parts) {
+                try {
+                    Integer.parseInt(part);
+                } catch (NumberFormatException e) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
 
     static OkHttpClient defaultClient = null;
     static OkHttpClient noRedirectClient = null;
