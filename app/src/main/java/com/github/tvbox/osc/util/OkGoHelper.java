@@ -20,10 +20,13 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.security.cert.CertificateException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
@@ -41,7 +44,7 @@ import xyz.doikki.videoplayer.exo.ExoMediaSourceHelper;
 
 
 public class OkGoHelper {
-    public static final long DEFAULT_MILLISECONDS = 6000;      //默认的超时时间
+    public static final long DEFAULT_MILLISECONDS = 8000;      //默认的超时时间
 
     static void initExoOkHttpClient() {
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
@@ -136,18 +139,53 @@ public class OkGoHelper {
 
     // 自定义 DNS 解析器
     static class CustomDns implements Dns {
+        private  ConcurrentHashMap<String, List<InetAddress>> map;
+        private final String excludeIps = "2409:8087:6c02:14:100::14,2409:8087:6c02:14:100::18,39.134.108.253,39.134.108.245";
         @NonNull
         @Override
         public List<InetAddress> lookup(@NonNull String hostname) throws UnknownHostException {
-            if (myHosts == null) myHosts = ApiConfig.get().getMyHost(); //确保只获取一次减少消耗
+            if (myHosts == null){
+                myHosts = ApiConfig.get().getMyHost(); //确保只获取一次减少消耗
+                if(!myHosts.isEmpty())mapHosts(myHosts);
+            }
             // 判断输入是否为 IP 地址
             if (isValidIpAddress(hostname)) {
                 return Collections.singletonList(InetAddress.getByName(hostname));
-            } else if (!myHosts.isEmpty() && myHosts.containsKey(hostname)) {
-                return Arrays.asList(InetAddress.getAllByName(myHosts.get(hostname)));
+            } else if (!map.isEmpty() && map.containsKey(hostname)) {
+                return Objects.requireNonNull(map.get(hostname));
             } else {
 //                return (is_doh?dnsOverHttps:Dns.SYSTEM).lookup(hostname);
                 return (dnsOverHttps).lookup(hostname);
+            }
+        }
+
+        public synchronized void mapHosts(Map<String,String> hosts) {
+            map=new ConcurrentHashMap<>();
+            for (Map.Entry<String, String> entry : hosts.entrySet()) {
+                String key = entry.getKey();
+                String value = entry.getValue();
+                map.put(key,getAllByName(value));
+            }
+        }
+
+        private List<InetAddress> getAllByName(String host) {
+            try {
+                // 获取所有与主机名关联的 IP 地址
+                InetAddress[] allAddresses = InetAddress.getAllByName(host);
+                // 创建一个列表用于存储有效的 IP 地址
+                List<InetAddress> validAddresses = new ArrayList<>();
+                Set<String> excludeIpsSet = new HashSet<>();
+                for (String ip : excludeIps.split(",")) {
+                    excludeIpsSet.add(ip.trim());  // 添加到集合，去除多余的空格
+                }
+                for (InetAddress address : allAddresses) {
+                    if (!excludeIpsSet.contains(address.getHostAddress())) {
+                        validAddresses.add(address);
+                    }
+                }
+                return validAddresses;
+            } catch (Exception e) {
+                return new ArrayList<>();
             }
         }
 

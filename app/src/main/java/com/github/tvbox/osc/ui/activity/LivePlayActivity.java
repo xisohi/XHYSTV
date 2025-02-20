@@ -1577,13 +1577,6 @@ public class LivePlayActivity extends BaseActivity {
                     }
                 });
             }
-            @Override
-            public void onError(Response<String> response) {
-                super.onError(response);
-                // 在请求失败或超时的情况下返回false
-                Toast.makeText(App.getInstance(), "请求超时", Toast.LENGTH_SHORT).show();
-                finish();
-            }
         });
     }
 
