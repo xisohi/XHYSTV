@@ -46,6 +46,7 @@ import xyz.doikki.videoplayer.exo.ExoMediaSourceHelper;
 public class OkGoHelper {
     public static final long DEFAULT_MILLISECONDS = 8000;      //默认的超时时间
 
+    static OkHttpClient ItvClient = null;
     static void initExoOkHttpClient() {
         OkHttpClient.Builder builder = new OkHttpClient.Builder();
         HttpLoggingInterceptor loggingInterceptor = new HttpLoggingInterceptor("OkExoPlayer");
@@ -72,8 +73,9 @@ public class OkGoHelper {
 
 //        builder.dns(dnsOverHttps);
         builder.dns(new CustomDns());
+        ItvClient=builder.build();
 
-        ExoMediaSourceHelper.getInstance(App.getInstance()).setOkClient(builder.build());
+        ExoMediaSourceHelper.getInstance(App.getInstance()).setOkClient(ItvClient);
     }
 
     public static DnsOverHttps dnsOverHttps = null;

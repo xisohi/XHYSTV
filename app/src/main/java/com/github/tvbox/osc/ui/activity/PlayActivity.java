@@ -93,6 +93,7 @@ import org.xwalk.core.XWalkWebResourceResponse;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -500,7 +501,13 @@ public class PlayActivity extends BaseActivity {
     void playUrl(String url, HashMap<String, String> headers) {
         LOG.i("playUrl:" + url);
         if(autoRetryCount>1 && url.contains(".m3u8")){
-            //todo
+            try {
+                String url_encode;
+                url_encode=URLEncoder.encode(url,"UTF-8");
+                url = ControlManager.get().getAddress(true) + "proxy?go=bom&url="+ url_encode;
+            }catch (UnsupportedEncodingException e) {
+
+            }
         }
         final String finalUrl = url;
         runOnUiThread(new Runnable() {
@@ -826,12 +833,21 @@ public class PlayActivity extends BaseActivity {
 
     private int autoRetryCount = 0;
 
+    private long lastRetryTime = 0;  // 记录上次调用时间（毫秒）
+
     boolean autoRetry() {
-        if (loadFoundVideoUrls != null && loadFoundVideoUrls.size() > 0) {
+        long currentTime = System.currentTimeMillis();
+        // 如果距离上次重试超过 10 秒（10000 毫秒），重置重试次数
+        if (currentTime - lastRetryTime > 10_000) {
+            autoRetryCount = 0;
+        }
+        lastRetryTime = currentTime;  // 更新上次调用时间
+        if (loadFoundVideoUrls != null && !loadFoundVideoUrls.isEmpty()) {
             autoRetryFromLoadFoundVideoUrls();
             return true;
         }
-        if (autoRetryCount < 1) {
+
+        if (autoRetryCount < 2) {
             autoRetryCount++;
             play(false);
             return true;
