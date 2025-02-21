@@ -500,6 +500,7 @@ public class PlayActivity extends BaseActivity {
 
     void playUrl(String url, HashMap<String, String> headers) {
         LOG.i("playUrl:" + url);
+        if(autoRetryCount==0)webPlayUrl=url;
         if(autoRetryCount>1 && url.contains(".m3u8")){
             try {
                 String url_encode;
@@ -659,6 +660,7 @@ public class PlayActivity extends BaseActivity {
                         HashMap<String, String> headers = null;
                         webUserAgent = null;
                         webHeaderMap = null;
+                        webPlayUrl = null;
                         if (info.has("header")) {
                             try {
                                 JSONObject hds = new JSONObject(info.getString("header"));
@@ -849,7 +851,8 @@ public class PlayActivity extends BaseActivity {
 
         if (autoRetryCount < 2) {
             autoRetryCount++;
-            play(false);
+//            play(false);
+            playUrl(webPlayUrl, webHeaderMap);
             return true;
         } else {
             autoRetryCount = 0;
@@ -938,7 +941,8 @@ public class PlayActivity extends BaseActivity {
     private String parseFlag;
     private String webUrl;
     private String webUserAgent;
-    private Map<String, String > webHeaderMap;
+    private HashMap<String, String > webHeaderMap;
+    private String webPlayUrl;
 
     private void initParse(String flag, boolean useParse, String playUrl, final String url) {
         parseFlag = flag;

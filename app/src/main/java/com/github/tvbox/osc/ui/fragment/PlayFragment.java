@@ -95,6 +95,7 @@ import org.xwalk.core.XWalkWebResourceResponse;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -509,9 +510,17 @@ public class PlayFragment extends BaseLazyFragment {
     }
 
     void playUrl(String url, HashMap<String, String> headers) {
+        if(autoRetryCount==0)webPlayUrl=url;
         LOG.i("playUrl:" + url);
         if(autoRetryCount>0 && url.contains(".m3u8")){
             // todo
+            try {
+                String url_encode;
+                url_encode=URLEncoder.encode(url,"UTF-8");
+                url = ControlManager.get().getAddress(true) + "proxy?go=bom&url="+ url_encode;
+            }catch (UnsupportedEncodingException e) {
+                e.printStackTrace();
+            }
         }
         if (mActivity == null) return;
         if (!isAdded()) return;
@@ -670,6 +679,7 @@ public class PlayFragment extends BaseLazyFragment {
                         HashMap<String, String> headers = null;
                         webUserAgent = null;
                         webHeaderMap = null;
+                        webPlayUrl = null;
                         if (info.has("header")) {
                             try {
                                 JSONObject hds = new JSONObject(info.getString("header"));
@@ -861,15 +871,22 @@ public class PlayFragment extends BaseLazyFragment {
     }
 
     private int autoRetryCount = 0;
-
+    private long lastRetryTime = 0;  // 记录上次调用时间（毫秒）
     boolean autoRetry() {
+        long currentTime = System.currentTimeMillis();
+        // 如果距离上次重试超过 10 秒（10000 毫秒），重置重试次数
+        if (currentTime - lastRetryTime > 10_000) {
+            autoRetryCount = 0;
+        }
+        lastRetryTime = currentTime;  // 更新上次调用时间
         if (loadFoundVideoUrls != null && loadFoundVideoUrls.size() > 0) {
             autoRetryFromLoadFoundVideoUrls();
             return true;
         }
         if (autoRetryCount < 1) {
             autoRetryCount++;
-            play(false);
+//            play(false);
+            playUrl(webPlayUrl, webHeaderMap);
             return true;
         } else {
             autoRetryCount = 0;
@@ -960,7 +977,8 @@ public class PlayFragment extends BaseLazyFragment {
     private String parseFlag;
     private String webUrl;
     private String webUserAgent;
-    private Map<String, String > webHeaderMap;
+    private HashMap<String, String > webHeaderMap;
+    private String webPlayUrl;
 
     private void initParse(String flag, boolean useParse, String playUrl, final String url) {
         parseFlag = flag;
