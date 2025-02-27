@@ -731,8 +731,8 @@ public class SourceViewModel extends ViewModel {
                     });
 
                     try {
-                        String json = future.get(10, TimeUnit.SECONDS);
-                        LOG.i("echo--getPlay--" + json);
+                        String json = future.get(8, TimeUnit.SECONDS);
+                        LOG.i("echo--getPlay--result:" + json);
                         // 处理返回的 JSON
                         if (!TextUtils.isEmpty(json)) {
                             JSONObject result = new JSONObject(json);

@@ -1024,7 +1024,7 @@ public class VodController extends BaseController {
 
     //尝试去bom
     public String getWebPlayUrlIfNeeded(String webPlayUrl) {
-        if (webPlayUrl != null && webPlayUrl.contains(".m3u8")) {
+        if (webPlayUrl != null && !webPlayUrl.contains("127.0.0.1:9978") &&  webPlayUrl.contains(".m3u8")) {
             try {
                 String urlEncode = URLEncoder.encode(webPlayUrl, "UTF-8");
                 LOG.i("echo-BOM-------");

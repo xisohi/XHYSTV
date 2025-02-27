@@ -688,9 +688,10 @@ public class PlayActivity extends BaseActivity {
                     } catch (Throwable th) {
                     }
                 } else {
-                    //获取播放信息错误后只需再重试一次
-                    autoRetryCount=1;
-                    errorWithRetry("获取播放信息错误", true);
+                    setTip("获取播放信息错误", false, true);
+//                    获取播放信息错误后只需再重试一次
+//                    autoRetryCount=2;
+//                    errorWithRetry("获取播放信息错误", true);
                 }
             }
         });
@@ -840,7 +841,7 @@ public class PlayActivity extends BaseActivity {
     boolean autoRetry() {
         long currentTime = System.currentTimeMillis();
         // 如果距离上次重试超过 10 秒（10000 毫秒），重置重试次数
-        if (currentTime - lastRetryTime > 10_000) {
+        if (autoRetryCount < 2 && currentTime - lastRetryTime > 10_000) {
             autoRetryCount = 0;
         }
         lastRetryTime = currentTime;  // 更新上次调用时间
