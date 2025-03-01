@@ -1054,7 +1054,7 @@ public class VodController extends BaseController {
                 mPlayerConfig.put("pl", p_type);
                 updatePlayerCfgView();
                 listener.updatePlayerCfg();
-                listener.replay(false);
+//                listener.replay(false);
             }else {
                 return true;
             }

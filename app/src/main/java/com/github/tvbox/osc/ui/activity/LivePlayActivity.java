@@ -180,14 +180,15 @@ public class LivePlayActivity extends BaseActivity {
     SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd");
     private View backcontroller;
     private CountDownTimer countDownTimer3;
-    private int videoWidth = 1920;
-    private int videoHeight = 1080;
+    private final int videoWidth = 1920;
+    private final int videoHeight = 1080;
     private TextView tv_currentpos;
     private TextView tv_duration;
     private SeekBar sBar;
     private View iv_playpause;
     private View iv_play;
     private  boolean show = false;
+    private static final int postTimeout = 6000;
 
     @Override
     protected int getLayoutResID() {
@@ -238,7 +239,7 @@ public class LivePlayActivity extends BaseActivity {
         divEpg = (LinearLayout) findViewById(R.id.divEPG);
         //右上角图片旋转
         objectAnimator = ObjectAnimator.ofFloat(iv_circle_bg,"rotation", 360.0f);
-        objectAnimator.setDuration(6000);
+        objectAnimator.setDuration(postTimeout);
         objectAnimator.setRepeatCount(-1);
         objectAnimator.start();
 
@@ -503,7 +504,7 @@ public class LivePlayActivity extends BaseActivity {
             }
             if(!tip_epg1.getText().equals("暂无信息")){
                 ll_epg.setVisibility(View.VISIBLE);
-                countDownTimer = new CountDownTimer(6000, 1000) {//底部epg隐藏时间设定
+                countDownTimer = new CountDownTimer(postTimeout, 1000) {//底部epg隐藏时间设定
                     public void onTick(long j) {
                     }
                     public void onFinish() {
@@ -532,7 +533,7 @@ public class LivePlayActivity extends BaseActivity {
                     ll_right_top_loading.setVisibility(View.GONE);
                     ll_right_top_huikan.setVisibility(View.GONE);
                 }
-            }, 6000);
+            }, postTimeout);
         }
     }
 
@@ -703,7 +704,7 @@ public class LivePlayActivity extends BaseActivity {
                     public void onAnimationEnd(Animator animation) {
                         super.onAnimationEnd(animation);
                         mHandler.removeCallbacks(mHideChannelListRun);
-                        mHandler.postDelayed(mHideChannelListRun, 6000);
+                        mHandler.postDelayed(mHideChannelListRun, postTimeout);
                     }
                 });
                 animator.start();
@@ -766,7 +767,7 @@ public class LivePlayActivity extends BaseActivity {
            // showChannelInfo();
             return true;
         }
-        mVideoView.release();
+        if(mVideoView!=null)mVideoView.release();
         if (!changeSource) {
             currentChannelGroupIndex = channelGroupIndex;
             currentLiveChannelIndex = liveChannelIndex;
@@ -787,9 +788,11 @@ public class LivePlayActivity extends BaseActivity {
         getEpg(new Date());
         backcontroller.setVisibility(View.GONE);
         ll_right_top_huikan.setVisibility(View.GONE);
-        mVideoView.setUrl(currentLiveChannelItem.getUrl());
-       // showChannelInfo();
-        mVideoView.start();
+        if(mVideoView!=null){
+            mVideoView.setUrl(currentLiveChannelItem.getUrl());
+            mVideoView.start();
+        }
+        // showChannelInfo();
         return true;
     }
 
@@ -857,7 +860,7 @@ public class LivePlayActivity extends BaseActivity {
                         @Override
                         public void onAnimationEnd(Animator animation) {
                             super.onAnimationEnd(animation);
-                            mHandler.postDelayed(mHideSettingLayoutRun, 6000);
+                            mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
                         }
                     });
                     animator.start();
@@ -899,7 +902,7 @@ public class LivePlayActivity extends BaseActivity {
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
             }
         });
         //电视
@@ -912,7 +915,7 @@ public class LivePlayActivity extends BaseActivity {
             @Override
             public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
                 epgListAdapter.setFocusedEpgIndex(position);
             }
 
@@ -1107,7 +1110,7 @@ public class LivePlayActivity extends BaseActivity {
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
             }
         });
 
@@ -1121,14 +1124,14 @@ public class LivePlayActivity extends BaseActivity {
             @Override
             public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
                 liveEpgDateAdapter.setFocusedIndex(position);
             }
 
             @Override
             public void onItemClick(TvRecyclerView parent, View itemView, int position) {
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
                 liveEpgDateAdapter.setSelectedIndex(position);
                 getEpg(liveEpgDateAdapter.getData().get(position).getDateParamVal());
             }
@@ -1140,7 +1143,7 @@ public class LivePlayActivity extends BaseActivity {
             public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
                 FastClickCheckUtil.check(view);
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
                 liveEpgDateAdapter.setSelectedIndex(position);
                 getEpg(liveEpgDateAdapter.getData().get(position).getDateParamVal());
             }
@@ -1184,7 +1187,7 @@ public class LivePlayActivity extends BaseActivity {
                     case VideoView.STATE_PREPARING:
                     case VideoView.STATE_BUFFERING:
                         mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, (Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1) + 1) * 6000);
+                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, (Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1) + 1) * 5000);
                         break;
                 }
             }
@@ -1234,7 +1237,7 @@ public class LivePlayActivity extends BaseActivity {
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
             }
         });
 
@@ -1282,7 +1285,7 @@ public class LivePlayActivity extends BaseActivity {
         }
         if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
             mHandler.removeCallbacks(mHideChannelListRun);
-            mHandler.postDelayed(mHideChannelListRun, 6000);
+            mHandler.postDelayed(mHideChannelListRun, postTimeout);
         }
     }
 
@@ -1297,7 +1300,7 @@ public class LivePlayActivity extends BaseActivity {
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
             }
         });
 
@@ -1313,7 +1316,7 @@ public class LivePlayActivity extends BaseActivity {
                 liveChannelGroupAdapter.setFocusedGroupIndex(-1);
                 liveChannelItemAdapter.setFocusedChannelIndex(position);
                 mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, 6000);
+                mHandler.postDelayed(mHideChannelListRun, postTimeout);
             }
 
             @Override
@@ -1337,7 +1340,7 @@ public class LivePlayActivity extends BaseActivity {
         playChannel(liveChannelGroupAdapter.getSelectedGroupIndex(), position, false);
         if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
             mHandler.removeCallbacks(mHideChannelListRun);
-            mHandler.postDelayed(mHideChannelListRun, 6000);
+            mHandler.postDelayed(mHideChannelListRun, postTimeout);
         }
     }
 
@@ -1352,7 +1355,7 @@ public class LivePlayActivity extends BaseActivity {
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 mHandler.removeCallbacks(mHideSettingLayoutRun);
-                mHandler.postDelayed(mHideSettingLayoutRun, 6000);
+                mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
             }
         });
 
@@ -1409,7 +1412,7 @@ public class LivePlayActivity extends BaseActivity {
         if (scrollToPosition < 0) scrollToPosition = 0;
         mSettingItemView.scrollToPosition(scrollToPosition);
         mHandler.removeCallbacks(mHideSettingLayoutRun);
-        mHandler.postDelayed(mHideSettingLayoutRun, 6000);
+        mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
     }
 
     private void initSettingItemView() {
@@ -1423,7 +1426,7 @@ public class LivePlayActivity extends BaseActivity {
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 super.onScrollStateChanged(recyclerView, newState);
                 mHandler.removeCallbacks(mHideSettingLayoutRun);
-                mHandler.postDelayed(mHideSettingLayoutRun, 6000);
+                mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
             }
         });
 
@@ -1439,7 +1442,7 @@ public class LivePlayActivity extends BaseActivity {
                 liveSettingGroupAdapter.setFocusedGroupIndex(-1);
                 liveSettingItemAdapter.setFocusedItemIndex(position);
                 mHandler.removeCallbacks(mHideSettingLayoutRun);
-                mHandler.postDelayed(mHideSettingLayoutRun, 6000);
+                mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
             }
 
             @Override
@@ -1515,17 +1518,20 @@ public class LivePlayActivity extends BaseActivity {
                 String type= livesOBJ.get("type").getAsString();
                 if(!type.equals("0")){
                     Toast.makeText(App.getInstance(), "暂不支持该直播类型", Toast.LENGTH_SHORT).show();
-                    break;
+                    return;
                 }
                 Hawk.put(HawkConfig.LIVE_GROUP_INDEX, position);
-                mVideoView.release();
                 ApiConfig.get().loadLiveApi(livesOBJ);
-//                init();
+                if (mVideoView != null) {
+                    mVideoView.release();
+                    mVideoView.resume();
+                    mVideoView=null;
+                }
                 recreate();
                 return;
         }
         mHandler.removeCallbacks(mHideSettingLayoutRun);
-        mHandler.postDelayed(mHideSettingLayoutRun, 6000);
+        mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
     }
 
     private void initLiveChannelList() {
@@ -1767,7 +1773,7 @@ public class LivePlayActivity extends BaseActivity {
                 }
 
                 if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE)
-                    mHandler.postDelayed(mHideChannelListRun, 6000);
+                    mHandler.postDelayed(mHideChannelListRun, postTimeout);
             }
 
             @Override
@@ -2026,7 +2032,7 @@ public class LivePlayActivity extends BaseActivity {
             iv_playpause.setBackground(ContextCompat.getDrawable(LivePlayActivity.context, R.drawable.icon_play));
         }
         if(countDownTimer3==null){
-            countDownTimer3 = new CountDownTimer(36000, 1000) {
+            countDownTimer3 = new CountDownTimer(postTimeout, 1000) {
 
                 @Override
                 public void onTick(long arg0) {
