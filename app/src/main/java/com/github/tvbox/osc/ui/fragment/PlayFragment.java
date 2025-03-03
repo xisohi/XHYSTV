@@ -703,14 +703,11 @@ public class PlayFragment extends BaseLazyFragment {
                             playUrl(playUrl + url, headers);
                         }
                     } catch (Throwable th) {
-//                        errorWithRetry("获取播放信息错误", true);
-//                        Toast.makeText(mContext, "获取播放信息错误1", Toast.LENGTH_SHORT).show();
                     }
                 } else {
-                    setTip("获取播放信息错误", false, true);
 //                    获取播放信息错误后只需再重试一次
-//                    autoRetryCount=2;
-//                    errorWithRetry("获取播放信息错误", true);
+                    autoRetryCount=2;
+                    errorWithRetry("获取播放信息错误", true);
                 }
             }
         });
@@ -872,7 +869,7 @@ public class PlayFragment extends BaseLazyFragment {
     private long lastRetryTime = 0;  // 记录上次调用时间（毫秒）
     boolean autoRetry() {
         long currentTime = System.currentTimeMillis();
-        if (autoRetryCount<2 && currentTime - lastRetryTime > 10_000){
+        if (autoRetryCount<2 && currentTime - lastRetryTime > 20_000){
             LOG.i("echo-reset-autoRetryCount");
             autoRetryCount = 0;
         }
