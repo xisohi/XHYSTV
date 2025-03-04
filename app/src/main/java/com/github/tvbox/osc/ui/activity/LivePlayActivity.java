@@ -86,6 +86,7 @@ import java.util.Hashtable;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.TimeZone;
 
 import xyz.doikki.videoplayer.player.VideoView;
@@ -472,7 +473,7 @@ public class LivePlayActivity extends BaseActivity {
             tv_current_program_name.setText("");
             tip_epg2.setText("开源测试软件");
             tv_next_program_name.setText("");
-            String savedEpgKey = channel_Name.getChannelName() + "_" + liveEpgDateAdapter.getItem(liveEpgDateAdapter.getSelectedIndex()).getDatePresented();
+            String savedEpgKey = channel_Name.getChannelName() + "_" + Objects.requireNonNull(liveEpgDateAdapter.getItem(liveEpgDateAdapter.getSelectedIndex())).getDatePresented();
             if (hsEpg.containsKey(savedEpgKey)) {
                 String[] epgInfo = EpgUtil.getEpgInfo(channel_Name.getChannelName());
                 updateChannelIcon(channel_Name.getChannelName(), epgInfo == null ? null : epgInfo[0]);
@@ -489,7 +490,7 @@ public class LivePlayActivity extends BaseActivity {
                                 tv_next_program_name.setText(((Epginfo) arrayList.get(size + 1)).title);
                             } else {
                                 tip_epg2.setText("00:00 - 23:59");
-                                tv_next_program_name.setText("No Information");
+                                tv_next_program_name.setText("精彩节目-暂无节目预告信息");
                             }
                             break;
                         } else {
@@ -1190,7 +1191,7 @@ public class LivePlayActivity extends BaseActivity {
                     case VideoView.STATE_ERROR:
                     case VideoView.STATE_PLAYBACK_COMPLETED:
                         mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, 1500);
+                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, 3000);
                         break;
                     case VideoView.STATE_PREPARING:
                     case VideoView.STATE_BUFFERING:
@@ -1544,10 +1545,16 @@ public class LivePlayActivity extends BaseActivity {
     private void initLiveChannelList() {
         List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
         if (list.isEmpty()) {
-            Hawk.put(HawkConfig.LIVE_GROUP_INDEX, 0);
-            Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
-            finish();
-            return;
+            if(Hawk.get(HawkConfig.LIVE_GROUP_INDEX, 0)!=0){
+                Hawk.put(HawkConfig.LIVE_GROUP_INDEX, 0);
+                JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
+                JsonObject livesOBJ = live_groups.get(0).getAsJsonObject();
+                ApiConfig.get().loadLiveApi(livesOBJ);
+            }else {
+                Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
+                finish();
+                return;
+            }
         }
 
         if (list.size() == 1 && list.get(0).getGroupName().startsWith("http://127.0.0.1")) {
@@ -1566,7 +1573,7 @@ public class LivePlayActivity extends BaseActivity {
             Uri parsedUrl = Uri.parse(url);
             url = new String(Base64.decode(parsedUrl.getQueryParameter("ext"), Base64.DEFAULT | Base64.URL_SAFE | Base64.NO_WRAP), "UTF-8");
         } catch (Throwable th) {
-            Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
+            Toast.makeText(App.getInstance(), "直播文件错误", Toast.LENGTH_SHORT).show();
             finish();
             return;
         }
