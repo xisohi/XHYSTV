@@ -322,6 +322,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
                     @Override
                     public void click(String value) {
                         Hawk.put(HawkConfig.API_URL, value);
+                        Hawk.put(HawkConfig.LIVE_API_URL, value);
                         tvApi.setText(value);
                         dialog.dismiss();
                     }

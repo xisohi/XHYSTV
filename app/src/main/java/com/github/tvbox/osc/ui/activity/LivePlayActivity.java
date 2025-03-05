@@ -1523,10 +1523,17 @@ public class LivePlayActivity extends BaseActivity {
                 if(position==Hawk.get(HawkConfig.LIVE_GROUP_INDEX, 0))break;
                 JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
                 JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
-                String type= livesOBJ.get("type").getAsString();
-                if(!type.equals("0")){
-                    Toast.makeText(App.getInstance(), "暂不支持该直播类型", Toast.LENGTH_SHORT).show();
-                    break;
+                if(livesOBJ.has("type")){
+                    String type= livesOBJ.get("type").getAsString();
+                    if(!type.equals("0")){
+                        Toast.makeText(App.getInstance(), "暂不支持该直播类型", Toast.LENGTH_SHORT).show();
+                        break;
+                    }
+                }else {
+                    if(!livesOBJ.has("channels")){
+                        Toast.makeText(App.getInstance(), "暂不支持该直播类型", Toast.LENGTH_SHORT).show();
+                        break;
+                    }
                 }
                 liveSettingItemAdapter.selectItem(position, true, true);
                 Hawk.put(HawkConfig.LIVE_GROUP_INDEX, position);
@@ -1548,8 +1555,14 @@ public class LivePlayActivity extends BaseActivity {
             if(Hawk.get(HawkConfig.LIVE_GROUP_INDEX, 0)!=0){
                 Hawk.put(HawkConfig.LIVE_GROUP_INDEX, 0);
                 JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
-                JsonObject livesOBJ = live_groups.get(0).getAsJsonObject();
-                ApiConfig.get().loadLiveApi(livesOBJ);
+                if(!live_groups.isEmpty()){
+                    JsonObject livesOBJ = live_groups.get(0).getAsJsonObject();
+                    ApiConfig.get().loadLiveApi(livesOBJ);
+                }else {
+                    Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
+                    finish();
+                    return;
+                }
             }else {
                 Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
                 finish();
@@ -1573,9 +1586,11 @@ public class LivePlayActivity extends BaseActivity {
             Uri parsedUrl = Uri.parse(url);
             url = new String(Base64.decode(parsedUrl.getQueryParameter("ext"), Base64.DEFAULT | Base64.URL_SAFE | Base64.NO_WRAP), "UTF-8");
         } catch (Throwable th) {
-            Toast.makeText(App.getInstance(), "直播文件错误", Toast.LENGTH_SHORT).show();
-            finish();
-            return;
+            if(!url.startsWith("http://127.0.0.1")){
+                Toast.makeText(App.getInstance(), "直播文件错误", Toast.LENGTH_SHORT).show();
+                finish();
+                return;
+            }
         }
         showLoading();
 
