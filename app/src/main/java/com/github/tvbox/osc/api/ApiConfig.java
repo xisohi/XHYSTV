@@ -161,7 +161,7 @@ public class ApiConfig {
     }
     private String TempKey = null;
     public void loadConfig(boolean useCache, LoadConfigCallback callback, Activity activity) {
-        String apiUrl = Hawk.get(HawkConfig.API_URL, "http://lcjly.cn/tvbox/XHYSyuan.json");
+        String apiUrl = Hawk.get(HawkConfig.API_URL, "http://xhys.xisohi.us.kg/XHYSyuan.json");
         if (apiUrl.isEmpty()) {
             callback.error("-1");
             return;
