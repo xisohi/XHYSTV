@@ -408,7 +408,7 @@ public class LivePlayActivity extends BaseActivity {
 
     public void getEpg(Date date) {
         String channelName = channel_Name.getChannelName();
-        SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd");
+        @SuppressLint("SimpleDateFormat") SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd");
         timeFormat.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
         String[] epgInfo = EpgUtil.getEpgInfo(channelName);
         String epgTagName = channelName;
@@ -416,9 +416,7 @@ public class LivePlayActivity extends BaseActivity {
         if (epgInfo != null && !epgInfo[1].isEmpty()) {
             epgTagName = epgInfo[1];
         }
-        String finalChannelName = channelName;
         epgListAdapter.CanBack(currentLiveChannelItem.getinclude_back());
-        //epgListAdapter.updateData(date, new ArrayList<>());
 
         String url;
         if(epgStringAddress.contains("{name}") && epgStringAddress.contains("{date}")){
@@ -475,21 +473,19 @@ public class LivePlayActivity extends BaseActivity {
             tv_next_program_name.setText("");
             String savedEpgKey = channel_Name.getChannelName() + "_" + Objects.requireNonNull(liveEpgDateAdapter.getItem(liveEpgDateAdapter.getSelectedIndex())).getDatePresented();
             if (hsEpg.containsKey(savedEpgKey)) {
-                String[] epgInfo = EpgUtil.getEpgInfo(channel_Name.getChannelName());
-                updateChannelIcon(channel_Name.getChannelName(), epgInfo == null ? null : epgInfo[0]);
                 ArrayList arrayList = (ArrayList) hsEpg.get(savedEpgKey);
                 if (arrayList != null && arrayList.size() > 0) {
                     Date date = new Date();
                     int size = arrayList.size() - 1;
                     while (size >= 0) {
                         if (date.after(((Epginfo) arrayList.get(size)).startdateTime) & date.before(((Epginfo) arrayList.get(size)).enddateTime)) {
-                            tip_epg1.setText(((Epginfo) arrayList.get(size)).start + " - " + ((Epginfo) arrayList.get(size)).end);
+                            tip_epg1.setText(((Epginfo) arrayList.get(size)).start + "-" + ((Epginfo) arrayList.get(size)).end);
                             tv_current_program_name.setText(((Epginfo) arrayList.get(size)).title);
                             if (size != arrayList.size() - 1) {
-                                tip_epg2.setText(((Epginfo) arrayList.get(size + 1)).start + " - " + ((Epginfo) arrayList.get(size + 1)).end);
+                                tip_epg2.setText(((Epginfo) arrayList.get(size + 1)).start + "-" + ((Epginfo) arrayList.get(size + 1)).end);
                                 tv_next_program_name.setText(((Epginfo) arrayList.get(size + 1)).title);
                             } else {
-                                tip_epg2.setText("00:00 - 23:59");
+                                tip_epg2.setText("00:00-23:59");
                                 tv_next_program_name.setText("精彩节目-暂无节目预告信息");
                             }
                             break;
@@ -546,6 +542,7 @@ public class LivePlayActivity extends BaseActivity {
         }
     }
 
+    @SuppressLint("SetTextI18n")
     private void updateChannelIcon(String channelName, String logoUrl) {
         if (StringUtils.isEmpty(logoUrl)) {
             liveIconNullBg.setVisibility(View.VISIBLE);
@@ -554,7 +551,7 @@ public class LivePlayActivity extends BaseActivity {
             liveIconNullText.setText("" + channel_Name.getChannelNum());
         } else {
             imgLiveIcon.setVisibility(View.VISIBLE);
-            Picasso.get().load(logoUrl).placeholder(R.drawable.app_banner).into(imgLiveIcon);
+            Picasso.get().load(logoUrl).into(imgLiveIcon);
             liveIconNullBg.setVisibility(View.INVISIBLE);
             liveIconNullText.setVisibility(View.INVISIBLE);
         }
