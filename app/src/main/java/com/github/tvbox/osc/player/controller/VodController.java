@@ -30,6 +30,7 @@ import com.github.tvbox.osc.ui.adapter.ParseAdapter;
 import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
+import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.M3u8;
 import com.github.tvbox.osc.util.PlayerHelper;
@@ -39,6 +40,7 @@ import com.lzy.okgo.OkGo;
 import com.lzy.okgo.callback.AbsCallback;
 import com.lzy.okgo.model.HttpHeaders;
 import com.lzy.okgo.model.Response;
+import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
 import com.owen.tvrecyclerview.widget.V7LinearLayoutManager;
 
@@ -82,6 +84,7 @@ public class VodController extends BaseController {
                         mBottomRoot.setVisibility(VISIBLE);
                         mTopRoot1.setVisibility(VISIBLE);
                         mTopRoot2.setVisibility(VISIBLE);
+                        mPlayLoadNetSpeedRightTop.setVisibility(VISIBLE);
                         mPlayTitle.setVisibility(GONE);
                         mNextBtn.requestFocus();
                         backBtn.setVisibility(ScreenUtils.isTv(context) ? INVISIBLE : VISIBLE);
@@ -91,7 +94,8 @@ public class VodController extends BaseController {
                     case 1003: { // 隐藏底部菜单
                         mBottomRoot.setVisibility(GONE);
                         mTopRoot1.setVisibility(GONE);
-                        mTopRoot2.setVisibility(GONE);
+//                        mTopRoot2.setVisibility(GONE);
+                        mPlayLoadNetSpeedRightTop.setVisibility(GONE);
                         backBtn.setVisibility(INVISIBLE);
                         break;
                     }
@@ -149,7 +153,10 @@ public class VodController extends BaseController {
     public TextView mLandscapePortraitBtn;
     private View backBtn;//返回键
     private boolean isClickBackBtn;
-   
+    TextView seekTime; //右上角进度时间显示
+    TextView mScreenDisplay; //增加屏显开关
+    LinearLayout tv_screen_display; //增加屏显布局
+
     LockRunnable lockRunnable = new LockRunnable();
     private boolean isLock = false;
     Handler myHandle;
@@ -196,6 +203,7 @@ public class VodController extends BaseController {
         mBottomRoot = findViewById(R.id.bottom_container);
         mTopRoot1 = findViewById(R.id.tv_top_l_container);
         mTopRoot2 = findViewById(R.id.tv_top_r_container);
+        tv_screen_display = findViewById(R.id.tv_screen_display);
         mParseRoot = findViewById(R.id.parse_root);
         mGridView = findViewById(R.id.mGridView);
         mPlayerRetry = findViewById(R.id.play_retry);
@@ -218,6 +226,8 @@ public class VodController extends BaseController {
         mAudioTrackBtn = findViewById(R.id.audio_track_select);
         mLandscapePortraitBtn = findViewById(R.id.landscape_portrait);
         backBtn = findViewById(R.id.tv_back);
+        seekTime = findViewById(R.id.tv_seek_time);
+        mScreenDisplay = findViewById(R.id.screen_display);
         backBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -643,6 +653,15 @@ public class VodController extends BaseController {
                 hideBottom();
             }
         });
+        //屏显
+        tv_screen_display.setVisibility(Hawk.get(HawkConfig.SCREEN_DISPLAY, GONE));
+        mScreenDisplay.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                tv_screen_display.setVisibility(tv_screen_display.getVisibility() == VISIBLE ? GONE : VISIBLE);
+                Hawk.put(HawkConfig.SCREEN_DISPLAY, tv_screen_display.getVisibility());
+            }
+        });
         mNextBtn.setNextFocusLeftId(R.id.play_time_start);
     }
 
@@ -770,6 +789,7 @@ public class VodController extends BaseController {
 
     private boolean skipEnd = true;
 
+    @SuppressLint("SetTextI18n")
     @Override
     protected void setProgress(int duration, int position) {
 
@@ -791,6 +811,7 @@ public class VodController extends BaseController {
         }
         mCurrentTime.setText(PlayerUtils.stringForTime(position));
         mTotalTime.setText(PlayerUtils.stringForTime(duration));
+        seekTime.setText((PlayerUtils.seconds2Time(position)) + " | " + (PlayerUtils.seconds2Time(duration))); //右上角进度条时间显示
         if (duration > 0) {
             mSeekBar.setEnabled(true);
             int pos = (int) (position * 1.0 / duration * mSeekBar.getMax());
@@ -865,7 +886,8 @@ public class VodController extends BaseController {
                 break;
             case VideoView.STATE_PAUSED:
                 mTopRoot1.setVisibility(GONE);
-                mTopRoot2.setVisibility(GONE);
+//                mTopRoot2.setVisibility(GONE);
+                mPlayLoadNetSpeedRightTop.setVisibility(GONE);
                 mPlayTitle.setVisibility(VISIBLE);
                 break;
             case VideoView.STATE_ERROR:
@@ -1062,7 +1084,7 @@ public class VodController extends BaseController {
             int playerType= mPlayerConfig.getInt("pl");
             int p_type = (playerType == 1) ? playerType + 1 : (playerType == 2) ? playerType - 1 : playerType;
             if (p_type != playerType) {
-                LOG.i("echo-切换播放器");
+                LOG.i("echo-切换播放器"+(p_type==1?"IJK":"exo"));
                 mPlayerConfig.put("pl", p_type);
                 updatePlayerCfgView();
                 listener.updatePlayerCfg();
