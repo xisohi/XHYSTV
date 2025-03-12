@@ -417,11 +417,18 @@ public class LivePlayActivity extends BaseActivity {
         String channelNameReal = getFirstPartBeforeSpace(channelName);
         @SuppressLint("SimpleDateFormat") SimpleDateFormat timeFormat = new SimpleDateFormat("yyyy-MM-dd");
         timeFormat.setTimeZone(TimeZone.getTimeZone("GMT+8:00"));
-        String[] epgInfo = EpgUtil.getEpgInfo(channelNameReal);
         String epgTagName = channelNameReal;
-        updateChannelIcon(channelName, epgInfo == null ? null : epgInfo[0]);
-        if (epgInfo != null && !epgInfo[1].isEmpty()) {
-            epgTagName = epgInfo[1];
+        if (logoUrl==null || logoUrl.isEmpty()){
+            String[] epgInfo = EpgUtil.getEpgInfo(channelNameReal);
+            if (epgInfo != null && !epgInfo[1].isEmpty()) {
+                epgTagName = epgInfo[1];
+            }
+            updateChannelIcon(channelName, epgInfo == null ? null : epgInfo[0]);
+        }else if(logoUrl.equals("false")){
+            updateChannelIcon(channelName, null);
+        }else {
+            String logo= logoUrl.replace("{name}",epgTagName);
+            updateChannelIcon(channelName, logo);
         }
         epgListAdapter.CanBack(currentLiveChannelItem.getinclude_back());
         String url;
@@ -825,6 +832,7 @@ public class LivePlayActivity extends BaseActivity {
 
     private JsonObject catchup=null;
     private Boolean hasCatchup=false;
+    private String logoUrl=null;
     private void initLiveObj(){
         int position=Hawk.get(HawkConfig.LIVE_GROUP_INDEX, 0);
         JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
@@ -833,6 +841,9 @@ public class LivePlayActivity extends BaseActivity {
             catchup = livesOBJ.getAsJsonObject("catchup");
             LOG.i("echo-catchup :"+ catchup.toString());
             hasCatchup=true;
+        }
+        if(livesOBJ.has("logo")){
+            logoUrl = livesOBJ.get("logo").getAsString();
         }
     }
 
@@ -1893,7 +1904,7 @@ public class LivePlayActivity extends BaseActivity {
         @Override
         public void run() {
             if (mVideoView == null) return;
-            String speed = PlayerHelper.getDisplaySpeed(mVideoView.getTcpSpeed());
+            String speed = PlayerHelper.getDisplaySpeed(mVideoView.getTcpSpeed(),true);
             tvNetSpeed.setText(speed);
 //            tv_right_top_tipnetspeed.setText(speed);
             mHandler.postDelayed(this, 1000);

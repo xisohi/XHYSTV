@@ -61,9 +61,9 @@ import java.util.Date;
 import java.util.Map;
 
 import xyz.doikki.videoplayer.player.VideoView;
-import xyz.doikki.videoplayer.util.PlayerUtils;
 
 import static xyz.doikki.videoplayer.util.PlayerUtils.stringForTime;
+import static xyz.doikki.videoplayer.util.PlayerUtils.seconds2Time;
 
 public class VodController extends BaseController {
     public VodController(@NonNull @NotNull Context context) {
@@ -85,6 +85,9 @@ public class VodController extends BaseController {
                         mTopRoot1.setVisibility(VISIBLE);
                         mTopRoot2.setVisibility(VISIBLE);
                         mPlayLoadNetSpeedRightTop.setVisibility(VISIBLE);
+                        if(Hawk.get(HawkConfig.SCREEN_DISPLAY,GONE)==GONE){
+                            mPlayPauseTime.setVisibility(VISIBLE);
+                        }
                         mPlayTitle.setVisibility(GONE);
                         mNextBtn.requestFocus();
                         backBtn.setVisibility(ScreenUtils.isTv(context) ? INVISIBLE : VISIBLE);
@@ -94,8 +97,10 @@ public class VodController extends BaseController {
                     case 1003: { // 隐藏底部菜单
                         mBottomRoot.setVisibility(GONE);
                         mTopRoot1.setVisibility(GONE);
-//                        mTopRoot2.setVisibility(GONE);
                         mPlayLoadNetSpeedRightTop.setVisibility(GONE);
+                        if(Hawk.get(HawkConfig.SCREEN_DISPLAY,GONE)==GONE){
+                            mPlayPauseTime.setVisibility(GONE);
+                        }
                         backBtn.setVisibility(INVISIBLE);
                         break;
                     }
@@ -165,14 +170,16 @@ public class VodController extends BaseController {
 
     int videoPlayState = 0;
 
-    private Runnable myRunnable2 = new Runnable() {
+    private final Runnable myRunnable2 = new Runnable() {
+        @SuppressLint("SetTextI18n")
         @Override
         public void run() {
             Date date = new Date();
-            SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm:ss");
+            @SuppressLint("SimpleDateFormat") SimpleDateFormat timeFormat = new SimpleDateFormat("hh:mm a");
             mPlayPauseTime.setText(timeFormat.format(date));
-            String speed = PlayerHelper.getDisplaySpeed(mControlWrapper.getTcpSpeed());
-            mPlayLoadNetSpeedRightTop.setText(speed);
+            String speedTop = PlayerHelper.getDisplaySpeed(mControlWrapper.getTcpSpeed(),true);
+            String speed = PlayerHelper.getDisplaySpeed(mControlWrapper.getTcpSpeed(),false);
+            mPlayLoadNetSpeedRightTop.setText(speedTop);
             mPlayLoadNetSpeed.setText(speed);
             String width = Integer.toString(mControlWrapper.getVideoSize()[0]);
             String height = Integer.toString(mControlWrapper.getVideoSize()[1]);
@@ -298,8 +305,6 @@ public class VodController extends BaseController {
         });
         mGridView.setAdapter(parseAdapter);
         parseAdapter.setNewData(ApiConfig.get().getParseBeanList());
-
-        mParseRoot.setVisibility(VISIBLE);
 
         mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override
@@ -654,12 +659,16 @@ public class VodController extends BaseController {
             }
         });
         //屏显
-        tv_screen_display.setVisibility(Hawk.get(HawkConfig.SCREEN_DISPLAY, GONE));
+        int disPlay = Hawk.get(HawkConfig.SCREEN_DISPLAY, GONE);
+        seekTime.setVisibility(disPlay);
+        mPlayPauseTime.setVisibility(disPlay);
         mScreenDisplay.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View view) {
-                tv_screen_display.setVisibility(tv_screen_display.getVisibility() == VISIBLE ? GONE : VISIBLE);
-                Hawk.put(HawkConfig.SCREEN_DISPLAY, tv_screen_display.getVisibility());
+                int disPlay =(Hawk.get(HawkConfig.SCREEN_DISPLAY, GONE) == VISIBLE) ? GONE : VISIBLE;
+                seekTime.setVisibility(disPlay);
+                if(disPlay==VISIBLE)mPlayPauseTime.setVisibility(disPlay);
+                Hawk.put(HawkConfig.SCREEN_DISPLAY, disPlay);
             }
         });
         mNextBtn.setNextFocusLeftId(R.id.play_time_start);
@@ -736,8 +745,8 @@ public class VodController extends BaseController {
             mPlayerIJKBtn.setVisibility(playerType == 1 ? VISIBLE : GONE);
             mPlayerScaleBtn.setText(PlayerHelper.getScaleName(mPlayerConfig.getInt("sc")));
             mPlayerSpeedBtn.setText("x" + mPlayerConfig.getDouble("sp"));
-            mPlayerTimeStartBtn.setText(PlayerUtils.stringForTime(mPlayerConfig.getInt("st") * 1000));
-            mPlayerTimeSkipBtn.setText(PlayerUtils.stringForTime(mPlayerConfig.getInt("et") * 1000));
+            mPlayerTimeStartBtn.setText(stringForTime(mPlayerConfig.getInt("st") * 1000));
+            mPlayerTimeSkipBtn.setText(stringForTime(mPlayerConfig.getInt("et") * 1000));
             mAudioTrackBtn.setVisibility((playerType == 1) ? VISIBLE : GONE);
         } catch (JSONException e) {
             e.printStackTrace();
@@ -809,9 +818,9 @@ public class VodController extends BaseController {
                 listener.playNext(true);
             }
         }
-        mCurrentTime.setText(PlayerUtils.stringForTime(position));
-        mTotalTime.setText(PlayerUtils.stringForTime(duration));
-        seekTime.setText((PlayerUtils.seconds2Time(position)) + " | " + (PlayerUtils.seconds2Time(duration))); //右上角进度条时间显示
+        mCurrentTime.setText(stringForTime(position));
+        mTotalTime.setText(stringForTime(duration));
+        seekTime.setText((seconds2Time(position)) + " | " + (seconds2Time(duration))); //右上角进度条时间显示
         if (duration > 0) {
             mSeekBar.setEnabled(true);
             int pos = (int) (position * 1.0 / duration * mSeekBar.getMax());
@@ -867,7 +876,7 @@ public class VodController extends BaseController {
         } else {
             mProgressIcon.setImageResource(R.drawable.icon_back);
         }
-        mProgressText.setText(PlayerUtils.stringForTime(seekTo) + " / " + PlayerUtils.stringForTime(duration));
+        mProgressText.setText(stringForTime(seekTo) + " / " + stringForTime(duration));
         mHandler.sendEmptyMessage(1000);
         mHandler.removeMessages(1001);
         mHandler.sendEmptyMessageDelayed(1001, 1000);
@@ -1104,6 +1113,10 @@ public class VodController extends BaseController {
     }
 
     public void playM3u8(final String url, final HashMap<String, String> headers) {
+        if(url.contains("url=")){
+            listener.startPlayUrl(url, headers);
+            return;
+        }
         OkGo.getInstance().cancelTag("m3u8-1");
         OkGo.getInstance().cancelTag("m3u8-2");
         final HttpHeaders okGoHeaders = new HttpHeaders();

@@ -1310,6 +1310,11 @@ public class PlayFragment extends BaseLazyFragment {
         }
     }
 
+
+    public MyVideoView getPlayer() {
+        return mVideoView;
+    }
+
     // webview
     private XWalkView mXwalkWebView;
     private WebView mSysWebView;
