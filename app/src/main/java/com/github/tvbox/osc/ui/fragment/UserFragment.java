@@ -12,6 +12,7 @@ import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.base.BaseLazyFragment;
 import com.github.tvbox.osc.bean.Movie;
+import com.github.tvbox.osc.bean.SourceBean;
 import com.github.tvbox.osc.bean.VodInfo;
 import com.github.tvbox.osc.cache.RoomDataManger;
 import com.github.tvbox.osc.event.ServerEvent;
@@ -111,6 +112,17 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
         return R.layout.fragment_user;
     }
 
+    private void jumpSearch(Movie.Video vod){
+        Intent newIntent;
+        if(Hawk.get(HawkConfig.FAST_SEARCH_MODE, false)){
+            newIntent = new Intent(mContext, FastSearchActivity.class);
+        }else {
+            newIntent = new Intent(mContext, SearchActivity.class);
+        }
+        newIntent.putExtra("title", vod.name);
+        newIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        mActivity.startActivity(newIntent);
+    }
     @Override
     protected void init() {
         EventBus.getDefault().register(this);
@@ -152,17 +164,14 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
                     Bundle bundle = new Bundle();
                     bundle.putString("id", vod.id);
                     bundle.putString("sourceKey", vod.sourceKey);
-                    jumpActivity(DetailActivity.class, bundle);
-                } else {
-                    Intent newIntent;
-                    if(Hawk.get(HawkConfig.FAST_SEARCH_MODE, false)){
-                        newIntent = new Intent(mContext, FastSearchActivity.class);
+                    SourceBean sourceBean = ApiConfig.get().getSource(vod.sourceKey);
+                    if(sourceBean!=null){
+                        jumpActivity(DetailActivity.class, bundle);
                     }else {
-                        newIntent = new Intent(mContext, SearchActivity.class);
+                        jumpSearch(vod);
                     }
-                    newIntent.putExtra("title", vod.name);
-                    newIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                    mActivity.startActivity(newIntent);
+                } else {
+                    jumpSearch(vod);
                 }
             }
         });
@@ -319,7 +328,11 @@ public class UserFragment extends BaseLazyFragment implements View.OnClickListen
     
         FastClickCheckUtil.check(v);
         if (v.getId() == R.id.tvLive) {
-            jumpActivity(LivePlayActivity.class);
+            if(Hawk.get(HawkConfig.LIVE_API_URL,Hawk.get(HawkConfig.API_URL,"")).isEmpty()){
+                Toast.makeText(mContext, "直播配置未设置", Toast.LENGTH_SHORT).show();
+            }else {
+                jumpActivity(LivePlayActivity.class);
+            }
         } else if (v.getId() == R.id.tvSearch) {
             jumpActivity(SearchActivity.class);
         } else if (v.getId() == R.id.tvSetting) {
