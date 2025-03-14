@@ -194,6 +194,11 @@ public class LivePlayActivity extends BaseActivity {
     private  boolean show = false;
     private static final int postTimeout = 6000;
 
+    // 遥控器数字键输入的要切换的频道号码
+    private int selectedChannelNumber = 0;
+    private TextView tvSelectedChannel;
+
+
     @Override
     protected int getLayoutResID() {
         return R.layout.activity_live_play;
@@ -269,6 +274,7 @@ public class LivePlayActivity extends BaseActivity {
         iv_playpause = findViewById(R.id.iv_playpause);
         iv_play = findViewById(R.id.iv_play);
 
+        tvSelectedChannel = findViewById(R.id.tv_selected_channel);
 
         if(show){
             backcontroller.setVisibility(View.VISIBLE);
@@ -619,6 +625,44 @@ public class LivePlayActivity extends BaseActivity {
         }
     }
 
+    private final Runnable mPlaySelectedChannel = new Runnable() {
+        @Override
+        public void run() {
+            int currentTotal = 0;
+            int groupIndex = 0;
+            int channelIndex = -1;
+            for (LiveChannelGroup group : liveChannelGroupList) {
+                int groupChannelCount = group.getLiveChannels().size();
+                if (currentTotal + groupChannelCount >= selectedChannelNumber) {
+                    channelIndex = selectedChannelNumber - currentTotal - 1; // 转换为0-based索引
+                    break;
+                }
+                currentTotal += groupChannelCount;
+                groupIndex++;
+            }
+            tvSelectedChannel.setVisibility(View.INVISIBLE);
+            tvSelectedChannel.setText("");
+            if(channelIndex>=0){
+                loadChannelGroupDataAndPlay(groupIndex,channelIndex);
+            }else {
+                playChannel(currentChannelGroupIndex, currentLiveChannelIndex, false);
+            }
+            selectedChannelNumber = 0;
+        }
+    };
+
+    @SuppressLint("SetTextI18n")
+    private void numericKeyDown(int digit) {
+        selectedChannelNumber = selectedChannelNumber * 10 + digit;
+        tvSelectedChannel.setText(Integer.toString(selectedChannelNumber));
+        ll_right_top_loading.setVisibility(View.GONE);
+        ll_right_top_huikan.setVisibility(View.GONE);
+        tvSelectedChannel.setVisibility(View.VISIBLE);
+
+        mHandler.removeCallbacks(mPlaySelectedChannel);
+        mHandler.postDelayed(mPlaySelectedChannel, 2500);
+    }
+
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -643,7 +687,7 @@ public class LivePlayActivity extends BaseActivity {
                         if(isBack){
                             showProgressBars(true);
                         }else{
-                            showSettingGroup();
+                            playPreSource();
                         }
                         break;
                     case KeyEvent.KEYCODE_DPAD_RIGHT:
@@ -658,6 +702,15 @@ public class LivePlayActivity extends BaseActivity {
                     case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
                         showChannelList();
                         break;
+                    default:
+                        if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
+                            keyCode -= KeyEvent.KEYCODE_0;
+                        } else if ( keyCode >= KeyEvent.KEYCODE_NUMPAD_0 && keyCode <= KeyEvent.KEYCODE_NUMPAD_9) {
+                            keyCode -= KeyEvent.KEYCODE_NUMPAD_0;
+                        } else {
+                            break;
+                        }
+                        numericKeyDown(keyCode);
                 }
             }
         } else if (event.getAction() == KeyEvent.ACTION_UP) {
@@ -1883,7 +1936,7 @@ public class LivePlayActivity extends BaseActivity {
         @Override
         public void run() {
             Date day=new Date();
-            SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
+            SimpleDateFormat df = new SimpleDateFormat("hh:mm a");
             tvTime.setText(df.format(day));
             mHandler.postDelayed(this, 1000);
         }

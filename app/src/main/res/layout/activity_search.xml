@@ -22,8 +22,7 @@
             <TextView
                 android:id="@+id/tvSearchCheckboxBtn"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
+                android:layout_height="28mm"
                 android:background="@drawable/shape_user_focus"
                 android:focusable="true"
                 android:gravity="center"
@@ -124,14 +123,16 @@
         android:paddingBottom="@dimen/vs_20">
 
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginBottom="@dimen/vs_10"
-            android:text="热门搜索"
-            android:textAlignment="center"
+            android:id="@+id/wordSwitch"
+            android:layout_width="@dimen/vs_200"
+            android:background="@drawable/shape_user_focus"
+            android:focusable="true"
+            android:gravity="center"
+            android:text="热词 | 历史"
             android:textColor="@android:color/white"
-            android:textSize="@dimen/ts_22" />
+            android:textSize="@dimen/ts_20"
+            android:layout_marginBottom="@dimen/ts_10"
+            android:layout_height="28mm"/>
 
         <com.owen.tvrecyclerview.widget.TvRecyclerView
             android:id="@+id/mGridViewWord"

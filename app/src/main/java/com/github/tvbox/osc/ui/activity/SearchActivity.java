@@ -83,6 +83,8 @@ public class SearchActivity extends BaseActivity {
     private static HashMap<String, String> mCheckSources = null;
     private SearchCheckboxDialog mSearchCheckboxDialog = null;
 
+    private TextView wordsSwitch;
+
     @Override
     protected int getLayoutResID() {
         return R.layout.activity_search;
@@ -162,6 +164,7 @@ public class SearchActivity extends BaseActivity {
         mGridViewWord.setLayoutManager(new V7LinearLayoutManager(this.mContext, 1, false));
         wordAdapter = new PinyinAdapter();
         mGridViewWord.setAdapter(wordAdapter);
+        wordsSwitch = findViewById(R.id.wordSwitch);
         wordAdapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
             @Override
             public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
@@ -204,6 +207,28 @@ public class SearchActivity extends BaseActivity {
                     bundle.putString("id", video.id);
                     bundle.putString("sourceKey", video.sourceKey);
                     jumpActivity(DetailActivity.class, bundle);
+                }
+            }
+        });
+        wordsSwitch.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                FastClickCheckUtil.check(v);
+                String wd = wordsSwitch.getText().toString().trim();
+                if(wd.contains("热词")){
+                    ArrayList<String> hisWord= Hawk.get(HawkConfig.SEARCH_HISTORY, new ArrayList<String>());
+                    if (hisWord.isEmpty()){
+                        Toast.makeText(mContext, "暂无历史搜索", Toast.LENGTH_SHORT).show();
+                    }else {
+                        wordsSwitch.setText("历史 搜索");
+                        wordAdapter.setNewData(hisWord);
+                    }
+                }
+                if(wd.equals("历史 搜索")){
+                    wordsSwitch.setText("热词 搜索");
+                    if(hots!=null && !hots.isEmpty()){
+                        wordAdapter.setNewData(hots);
+                    }
                 }
             }
         });
@@ -487,6 +512,16 @@ public class SearchActivity extends BaseActivity {
         }
         showLoading();
         etSearch.setText(title);
+
+        //写入历史记录
+        ArrayList<String> history = Hawk.get(HawkConfig.SEARCH_HISTORY, new ArrayList<String>());
+        if (!history.contains(title))
+            history.add(0, title);
+        if (history.size() > 10)
+            history.remove(10);
+        Hawk.put(HawkConfig.SEARCH_HISTORY, history);
+
+
         this.searchTitle = title;
         mGridView.setVisibility(View.INVISIBLE);
         searchAdapter.setNewData(new ArrayList<>());
