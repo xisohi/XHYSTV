@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.AssetManager;
 import android.content.res.Resources;
-import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Build;
@@ -15,7 +14,6 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.content.ContextCompat;
 import androidx.core.content.PermissionChecker;
 
 import com.github.tvbox.osc.R;
@@ -29,15 +27,11 @@ import com.kingja.loadsir.core.LoadSir;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 
 import me.jessyan.autosize.AutoSizeCompat;
 import me.jessyan.autosize.internal.CustomAdapt;
 import xyz.doikki.videoplayer.util.CutoutUtil;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 
 /**
  * @author pj567
@@ -66,7 +60,7 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         super.onCreate(savedInstanceState);
         setContentView(getLayoutResID());
         mContext = this;
-        CutoutUtil.adaptCutoutAboveAndroidP(mContext, true); // 设置刘海
+        CutoutUtil.adaptCutoutAboveAndroidP(mContext, true);//设置刘海
         AppManager.getInstance().addActivity(this);
         init();
     }
@@ -130,13 +124,13 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
     }
 
     protected void showEmpty() {
-        if (mLoadService != null) {
+        if (null != mLoadService) {
             mLoadService.showCallback(EmptyCallback.class);
         }
     }
 
     protected void showSuccess() {
-        if (mLoadService != null) {
+        if (null != mLoadService) {
             mLoadService.showSuccess();
         }
     }
@@ -187,52 +181,15 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
     protected static BitmapDrawable globalWp = null;
 
     public void changeWallpaper(boolean force) {
-        if (!force && globalWp != null) {
+        if (!force && globalWp != null)
             getWindow().setBackgroundDrawable(globalWp);
-            return;
-        }
-
-        // 网络图片的 URL
-        final String imageUrl = "https://xhys.lcjly.cn/image/bg.jpg";
-
-        // 使用 OkHttp 加载网络图片
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                OkHttpClient client = new OkHttpClient();
-                Request request = new Request.Builder().url(imageUrl).build();
-                try (Response response = client.newCall(request).execute()) {
-                    if (response.isSuccessful() && response.body() != null) {
-                        final Bitmap bitmap = BitmapFactory.decodeStream(response.body().byteStream());
-                        runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (bitmap != null) {
-                                    globalWp = new BitmapDrawable(getResources(), bitmap);
-                                    getWindow().setBackgroundDrawable(globalWp);
-                                } else {
-                                    loadFallbackWallpaper();
-                                }
-                            }
-                        });
-                    } else {
-                        loadFallbackWallpaper();
-                    }
-                } catch (IOException e) {
-                    e.printStackTrace();
-                    loadFallbackWallpaper();
-                }
-            }
-        }).start();
-    }
-
-    private void loadFallbackWallpaper() {
         try {
             File wp = new File(getFilesDir().getAbsolutePath() + "/wp");
             if (wp.exists()) {
                 BitmapFactory.Options opts = new BitmapFactory.Options();
                 opts.inJustDecodeBounds = true;
                 BitmapFactory.decodeFile(wp.getAbsolutePath(), opts);
+                // 从Options中获取图片的分辨率
                 int imageHeight = opts.outHeight;
                 int imageWidth = opts.outWidth;
                 int picHeight = 720;
@@ -247,6 +204,7 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
                     scale = scaleY;
                 }
                 opts.inJustDecodeBounds = false;
+                // 采样率
                 opts.inSampleSize = scale;
                 globalWp = new BitmapDrawable(BitmapFactory.decodeFile(wp.getAbsolutePath(), opts));
             } else {
@@ -256,11 +214,9 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
             throwable.printStackTrace();
             globalWp = null;
         }
-
-        if (globalWp == null) {
-            getWindow().setBackgroundDrawableResource(R.drawable.app_bg);
-        } else {
+        if (globalWp != null)
             getWindow().setBackgroundDrawable(globalWp);
-        }
+        else
+            getWindow().setBackgroundDrawableResource(R.drawable.app_bg);
     }
 }
