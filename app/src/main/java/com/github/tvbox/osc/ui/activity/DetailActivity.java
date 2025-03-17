@@ -598,7 +598,7 @@ public class DetailActivity extends BaseActivity {
     }
     private boolean isReverse(List<VodInfo.VodSeries> list) {
         // 循环比较相邻元素
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < Math.min(list.size()-1,4); i++) {
             int current = extractNumber(list.get(i).name);
             int next = extractNumber(list.get(i + 1).name);
             if (current < next) return false;
