@@ -663,11 +663,14 @@ public class LivePlayActivity extends BaseActivity {
         mHandler.postDelayed(mPlaySelectedChannel, 2500);
     }
 
+    private final Handler mmHandler = new Handler();
+    private Runnable mLongPressRunnable;
+    private static final long LONG_PRESS_DELAY = 800;
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        int keyCode = event.getKeyCode();
         if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            int keyCode = event.getKeyCode();
-            if (keyCode == KeyEvent.KEYCODE_MENU) {
+            if (keyCode == KeyEvent.KEYCODE_MENU || keyCode == KeyEvent.KEYCODE_INFO || keyCode == KeyEvent.KEYCODE_HELP) {
                 showSettingGroup();
             } else if (!isListOrSettingLayoutVisible()) {
                 switch (keyCode) {
@@ -700,7 +703,6 @@ public class LivePlayActivity extends BaseActivity {
                     case KeyEvent.KEYCODE_DPAD_CENTER:
                     case KeyEvent.KEYCODE_ENTER:
                     case KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE:
-                        showChannelList();
                         break;
                     default:
                         if (keyCode >= KeyEvent.KEYCODE_0 && keyCode <= KeyEvent.KEYCODE_9) {
@@ -714,8 +716,38 @@ public class LivePlayActivity extends BaseActivity {
                 }
             }
         } else if (event.getAction() == KeyEvent.ACTION_UP) {
+            if (!isListOrSettingLayoutVisible()) {
+                if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) && event.getRepeatCount() == 0) {
+                    showChannelList();
+                }
+            }
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if ((keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) && event.getRepeatCount() == 0) {
+            mLongPressRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    showSettingGroup(); //实现长按调出菜单
+                }
+            };
+            mmHandler.postDelayed(mLongPressRunnable, LONG_PRESS_DELAY);
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+            if (mLongPressRunnable != null) {
+                mmHandler.removeCallbacks(mLongPressRunnable);
+                mLongPressRunnable = null;
+            }
+        }
+        return super.onKeyUp(keyCode, event);
     }
 
     @Override
@@ -762,12 +794,6 @@ public class LivePlayActivity extends BaseActivity {
                 });
             }
             refreshChannelList(currentChannelGroupIndex);
-            if (currentLiveChannelIndex > -1){
-                mLiveChannelView.scrollToPosition(currentLiveChannelIndex);
-                mLiveChannelView.setSelection(currentLiveChannelIndex);
-            }
-//            mChannelGroupView.scrollToPosition(currentChannelGroupIndex);
-//            mChannelGroupView.setSelection(currentChannelGroupIndex);
 
             mHandler.postDelayed(mFocusCurrentChannelAndShowChannelList, 50);
         }
@@ -781,13 +807,18 @@ public class LivePlayActivity extends BaseActivity {
     private List<LiveChannelItem> mLastChannelList = new ArrayList<>();
 
     private void refreshChannelList(int currentChannelGroupIndex) {
-        // 1. 获取新数据
         List<LiveChannelItem> newChannels = getLiveChannels(currentChannelGroupIndex);
-        // 2. 判断数据是否变化（相同组索引且数据内容未变）
+        // 2. 判断数据是否变化
         if (currentChannelGroupIndex == mLastChannelGroupIndex
                 && isSameData(newChannels, mLastChannelList)) {
             return; // 数据未变化，跳过刷新 解决部分直播频道过多时卡顿
         }
+        if (currentLiveChannelIndex > -1){
+            mLiveChannelView.scrollToPosition(currentLiveChannelIndex);
+            mLiveChannelView.setSelection(currentLiveChannelIndex);
+        }
+        mChannelGroupView.scrollToPosition(currentChannelGroupIndex);
+        mChannelGroupView.setSelection(currentChannelGroupIndex);
         mLastChannelGroupIndex = currentChannelGroupIndex;
         mLastChannelList = new ArrayList<>(newChannels);
         liveChannelItemAdapter.setNewData(newChannels);
@@ -1498,6 +1529,7 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private void selectChannelGroup(int groupIndex, boolean focus, int liveChannelIndex) {
+        mLastChannelGroupIndex=groupIndex;
         if (focus) {
             liveChannelGroupAdapter.setFocusedGroupIndex(groupIndex);
             liveChannelItemAdapter.setFocusedChannelIndex(-1);
@@ -1542,8 +1574,6 @@ public class LivePlayActivity extends BaseActivity {
                 if (position < 0) return;
                 liveChannelGroupAdapter.setFocusedGroupIndex(-1);
                 liveChannelItemAdapter.setFocusedChannelIndex(position);
-                mHandler.removeCallbacks(mHideChannelListRun);
-                mHandler.postDelayed(mHideChannelListRun, postTimeout);
             }
 
             @Override
@@ -1557,18 +1587,18 @@ public class LivePlayActivity extends BaseActivity {
             @Override
             public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
                 FastClickCheckUtil.check(view);
+                liveChannelItemAdapter.setSelectedChannelIndex(position);
                 clickLiveChannel(position);
             }
         });
     }
 
     private void clickLiveChannel(int position) {
-        liveChannelItemAdapter.setSelectedChannelIndex(position);
-        playChannel(liveChannelGroupAdapter.getSelectedGroupIndex(), position, false);
         if (tvLeftChannelListLayout.getVisibility() == View.VISIBLE) {
             mHandler.removeCallbacks(mHideChannelListRun);
             mHandler.postDelayed(mHideChannelListRun, postTimeout);
         }
+        playChannel(liveChannelGroupAdapter.getSelectedGroupIndex(), position, false);
     }
 
     private void initSettingGroupView() {
