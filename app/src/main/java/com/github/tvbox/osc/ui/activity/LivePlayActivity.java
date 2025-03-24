@@ -921,6 +921,8 @@ public class LivePlayActivity extends BaseActivity {
         int position=Hawk.get(HawkConfig.LIVE_GROUP_INDEX, 0);
         JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
         JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
+        String type = livesOBJ.has("type")?livesOBJ.get("type").getAsString():"0";
+
         if(livesOBJ.has("catchup")){
             catchup = livesOBJ.getAsJsonObject("catchup");
             LOG.i("echo-catchup :"+ catchup.toString());
@@ -928,6 +930,10 @@ public class LivePlayActivity extends BaseActivity {
         }
         if(livesOBJ.has("logo")){
             logoUrl = livesOBJ.get("logo").getAsString();
+        }
+        if(type.equals("3")){
+            String jarUrl=livesOBJ.has("jar")?livesOBJ.get("jar").getAsString():"";
+            ApiConfig.get().setLiveJar(jarUrl);
         }
     }
 
@@ -1773,7 +1779,7 @@ public class LivePlayActivity extends BaseActivity {
                 JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
                 if(livesOBJ.has("type")){
                     String type= livesOBJ.get("type").getAsString();
-                    if(!type.equals("0")){
+                    if(!type.equals("0") && !type.equals("3")){
                         Toast.makeText(App.getInstance(), "暂不支持该直播类型", Toast.LENGTH_SHORT).show();
                         break;
                     }

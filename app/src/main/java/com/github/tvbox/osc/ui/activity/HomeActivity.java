@@ -49,8 +49,11 @@ import com.github.tvbox.osc.ui.tv.widget.NoScrollViewPager;
 import com.github.tvbox.osc.ui.tv.widget.ViewObj;
 import com.github.tvbox.osc.util.AppManager;
 import com.github.tvbox.osc.util.DefaultConfig;
+import com.github.tvbox.osc.util.FastClickCheckUtil;
+import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
+import com.github.tvbox.osc.util.MD5;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
@@ -62,6 +65,7 @@ import org.greenrobot.eventbus.Subscribe;
 import org.greenrobot.eventbus.ThreadMode;
 import org.jetbrains.annotations.NotNull;
 
+import java.io.File;
 import java.lang.reflect.Field;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -234,8 +238,26 @@ public class HomeActivity extends BaseActivity {
         tvName.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                FastClickCheckUtil.check(v);
                 if(dataInitOk && jarInitOk){
-                    showSiteSwitch();
+                    String cspCachePath = FileUtils.getFilePath()+"/csp/";
+                    String jar=ApiConfig.get().getHomeSourceBean().getJar();
+                    String jarUrl=!jar.isEmpty()?jar:ApiConfig.get().getSpider();
+                    File cspCacheDir = new File(cspCachePath + MD5.string2MD5(jarUrl)+".jar");
+                    Toast.makeText(mContext, "jar缓存已清除", Toast.LENGTH_LONG).show();
+                    if (!cspCacheDir.exists()){
+                        return;
+                    }
+                    new Thread(() -> {
+                        try {
+                            FileUtils.deleteFile(cspCacheDir);
+                            ApiConfig.get().clearJarLoader();
+                            refreshHome();
+                        } catch (Exception e) {
+                            e.printStackTrace();
+                        }
+                    }).start();
+
                 }else {
                     jumpActivity(SettingActivity.class);
                 }
@@ -244,16 +266,7 @@ public class HomeActivity extends BaseActivity {
         tvName.setOnLongClickListener(new View.OnLongClickListener() {
             @Override
             public boolean onLongClick(View v) {
-                if(dataInitOk && jarInitOk){
-                    Intent intent = new Intent(getApplicationContext(), HomeActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    Bundle bundle = new Bundle();
-                    bundle.putBoolean("useCache", true);
-                    intent.putExtras(bundle);
-                    HomeActivity.this.startActivity(intent);
-                }else {
-                    jumpActivity(SettingActivity.class);
-                }
+                jumpActivity(SettingActivity.class);
                 return true;
             }
         });
@@ -638,50 +651,57 @@ public class HomeActivity extends BaseActivity {
         ControlManager.get().stopServer();
     }
 
+    private SelectDialog<SourceBean> mSiteSwitchDialog;
+
     void showSiteSwitch() {
         List<SourceBean> sites = ApiConfig.get().getSwitchSourceBeanList();
-        if (sites.size() > 0) {
-            SelectDialog<SourceBean> dialog = new SelectDialog<>(HomeActivity.this);
-            TvRecyclerView tvRecyclerView = dialog.findViewById(R.id.list);
-            int spanCount;
-            spanCount = (int)Math.floor(sites.size()/20);
+        if (sites.isEmpty()) return;
+        int select = sites.indexOf(ApiConfig.get().getHomeSourceBean());
+        if (select < 0) select = 0;
+        if (mSiteSwitchDialog == null) {
+            mSiteSwitchDialog = new SelectDialog<>(HomeActivity.this);
+            TvRecyclerView tvRecyclerView = mSiteSwitchDialog.findViewById(R.id.list);
+            // 根据 sites 数量动态计算列数
+            int spanCount = (int) Math.floor(sites.size() / 20.0);
             spanCount = Math.min(spanCount, 2);
-            tvRecyclerView.setLayoutManager(new V7GridLayoutManager(dialog.getContext(), spanCount+1));
-            ConstraintLayout cl_root = dialog.findViewById(R.id.cl_root);
+            tvRecyclerView.setLayoutManager(new V7GridLayoutManager(mSiteSwitchDialog.getContext(), spanCount + 1));
+            // 设置对话框宽度
+            ConstraintLayout cl_root = mSiteSwitchDialog.findViewById(R.id.cl_root);
             ViewGroup.LayoutParams clp = cl_root.getLayoutParams();
-            clp.width = AutoSizeUtils.mm2px(dialog.getContext(), 380+200*spanCount);
-            dialog.setTip("请选择首页数据源");
-            int select = sites.indexOf(ApiConfig.get().getHomeSourceBean());
-            if (select<0) select = 0;
-            dialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<SourceBean>() {
+            clp.width = AutoSizeUtils.mm2px(mSiteSwitchDialog.getContext(), 380 + 200 * spanCount);
+            mSiteSwitchDialog.setTip("请选择首页数据源");
+            mSiteSwitchDialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<SourceBean>() {
                 @Override
                 public void click(SourceBean value, int pos) {
                     ApiConfig.get().setSourceBean(value);
-                    Intent intent = new Intent(getApplicationContext(), HomeActivity.class);
-                    intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
-                    Bundle bundle = new Bundle();
-                    bundle.putBoolean("useCache", true);
-                    intent.putExtras(bundle);
-                    HomeActivity.this.startActivity(intent);
+                    refreshHome();
                 }
-
                 @Override
                 public String getDisplay(SourceBean val) {
                     return val.getName();
                 }
             }, new DiffUtil.ItemCallback<SourceBean>() {
                 @Override
-                public boolean areItemsTheSame(@NonNull @NotNull SourceBean oldItem, @NonNull @NotNull SourceBean newItem) {
+                public boolean areItemsTheSame(@NonNull SourceBean oldItem, @NonNull SourceBean newItem) {
                     return oldItem == newItem;
                 }
-
                 @Override
-                public boolean areContentsTheSame(@NonNull @NotNull SourceBean oldItem, @NonNull @NotNull SourceBean newItem) {
+                public boolean areContentsTheSame(@NonNull SourceBean oldItem, @NonNull SourceBean newItem) {
                     return oldItem.getKey().equals(newItem.getKey());
                 }
             }, sites, select);
-            dialog.show();
         }
+        mSiteSwitchDialog.show();
+    }
+
+    private void refreshHome()
+    {
+        Intent intent = new Intent(getApplicationContext(), HomeActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+        Bundle bundle = new Bundle();
+        bundle.putBoolean("useCache", true);
+        intent.putExtras(bundle);
+        HomeActivity.this.startActivity(intent);
     }
     /**
      * 检查更新

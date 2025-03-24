@@ -2,7 +2,7 @@ name: Test
 
 on:
   schedule:
-    - cron: 59 */8 * * *
+    - cron: 0 13 1 * *
   workflow_dispatch:
     inputs:
       rebuild:
@@ -89,6 +89,7 @@ jobs:
           sed -i '$a\RELEASE_KEY_ALIAS=TVBoxOSC'            ./gradle.properties
           sed -i '$a\RELEASE_STORE_PASSWORD=TVBoxOSC'       ./gradle.properties
           sed -i '$a\RELEASE_KEY_PASSWORD=TVBoxOSC'         ./gradle.properties
+          sed -i 's/^#\(org.gradle.jvmargs=.*\)/\1/'        ./gradle.properties
       - uses: actions/setup-java@v4
         if: ${{ matrix.java_ver }}
         with:
@@ -145,18 +146,6 @@ jobs:
         if: ${{ inputs.donotpublish && env.commit }}
         run: |
           echo "commit=" >> $GITHUB_ENV
-      - name: Release and Upload Assets
-        uses: ncipollo/release-action@v1
-        if: ${{ env.commit }}
-        with:
-          name: ${{ env.tag }}
-          tag: ${{ env.tag }}
-          bodyFile: TVBoxOSC/apk/${{ matrix.userName }}-Release.log
-          allowUpdates: true
-          removeArtifacts: true
-          artifacts: |
-            TVBoxOSC/apk/*.apk
-            TVBoxOSC/apk/sourceCode-${{ env.commitS }}.*
   clean:
     needs: build
     runs-on: ubuntu-latest

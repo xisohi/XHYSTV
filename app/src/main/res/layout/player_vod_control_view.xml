@@ -649,4 +649,23 @@
         android:src="@drawable/icon_unlock"
         android:visibility="invisible" />
 
+    <FrameLayout
+        android:id="@+id/play_speed_3_container"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_speed_indicator"
+        android:visibility="gone"
+        android:padding="8dp">
+
+        <TextView
+            android:id="@+id/tv_speed_3"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="3.0 X"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+    </FrameLayout>
+
 </FrameLayout>

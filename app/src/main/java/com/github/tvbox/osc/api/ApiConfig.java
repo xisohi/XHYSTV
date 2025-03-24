@@ -72,23 +72,25 @@ public class ApiConfig {
     private String spider = null;
     public String wallpaper = "";
 
-    private SourceBean emptyHome = new SourceBean();
+    private final SourceBean emptyHome = new SourceBean();
 
-    private JarLoader jarLoader = new JarLoader();
-    private JsLoader jsLoader = new JsLoader();
-    private Gson gson;
+    private final JarLoader jarLoader = new JarLoader();
+    private final JsLoader jsLoader = new JsLoader();
+    private final Gson gson;
 
-    private String userAgent = "okhttp/3.15";
+    private final String userAgent = "okhttp/3.15";
 
-    private String requestAccept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9";
+    private final String requestAccept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9";
 
     private String defaultLiveObjString="{\"lives\":[{\"name\":\"txt_m3u\",\"type\":0,\"url\":\"txt_m3u_url\"}]}";
     private ApiConfig() {
+        jarLoader.clear();
         sourceBeanList = new LinkedHashMap<>();
         liveChannelGroupList = new ArrayList<>();
         parseBeanList = new ArrayList<>();
         searchSourceBeanList = new ArrayList<>();
         gson = new Gson();
+        Hawk.put(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
         loadDefaultConfig();
     }
 
@@ -248,6 +250,10 @@ public class ApiConfig {
             }
         }
         String configUrl=configUrl(apiUrl);
+        // 使用内部存储，将当前配置地址写入到应用的私有目录中
+        File configUrlFile = new File(App.getInstance().getFilesDir().getAbsolutePath() + "/config_url");
+        FileUtils.saveCache(configUrlFile,configUrl);
+
         OkGo.<String>get(configUrl)
                 .headers("User-Agent", userAgent)
                 .headers("Accept", requestAccept)
@@ -256,6 +262,7 @@ public class ApiConfig {
                     public void onSuccess(Response<String> response) {
                         try {
                             String json = response.body();
+                            LOG.i("echo-ConfigJson"+json);
                             parseJson(apiUrl, json);
                             FileUtils.saveCache(cache,json);
                             callback.success();
@@ -302,10 +309,19 @@ public class ApiConfig {
         String[] urls = spider.split(";md5;");
         String jarUrl = urls[0];
         String md5 = urls.length > 1 ? urls[1].trim() : "";
-        File cache = new File(App.getInstance().getFilesDir().getAbsolutePath() + "/csp.jar");
+        File cache = new File(App.getInstance().getFilesDir().getAbsolutePath() + "/csp/"+MD5.string2MD5(jarUrl)+".jar");
 
         if (!md5.isEmpty() || useCache) {
             if (cache.exists() && (useCache || MD5.getFileMd5(cache).equalsIgnoreCase(md5))) {
+                if (jarLoader.load(cache.getAbsolutePath())) {
+                    callback.success();
+                } else {
+                    callback.error("");
+                }
+                return;
+            }
+        }else {
+            if (Boolean.parseBoolean(jarCache) && cache.exists() && !FileUtils.isWeekAgo(cache)) {
                 if (jarLoader.load(cache.getAbsolutePath())) {
                     callback.success();
                 } else {
@@ -399,12 +415,12 @@ public class ApiConfig {
         parseJson(apiUrl, sb.toString());
     }
 
+    private static  String jarCache ="true";
     private void parseJson(String apiUrl, String jsonStr) {
-        LOG.i("echo-parseJson"+jsonStr);
-
         JsonObject infoJson = gson.fromJson(jsonStr, JsonObject.class);
         // spider
         spider = DefaultConfig.safeJsonString(infoJson, "spider", "");
+        jarCache = DefaultConfig.safeJsonString(infoJson, "jarCache", "true");
         // wallpaper
         wallpaper = DefaultConfig.safeJsonString(infoJson, "wallpaper", "");
         // 远端站点源
@@ -414,7 +430,7 @@ public class ApiConfig {
             SourceBean sb = new SourceBean();
             String siteKey = obj.get("key").getAsString().trim();
             sb.setKey(siteKey);
-            sb.setName(obj.get("name").getAsString().trim());
+            sb.setName(obj.has("name")?obj.get("name").getAsString().trim():siteKey);
             sb.setType(obj.get("type").getAsInt());
             sb.setApi(obj.get("api").getAsString().trim());
             sb.setSearchable(DefaultConfig.safeJsonInt(obj, "searchable", 1));
@@ -460,6 +476,7 @@ public class ApiConfig {
                 pb.setType(DefaultConfig.safeJsonInt(obj, "type", 0));
                 parseBeanList.add(pb);
             }
+            if(!parseBeanList.isEmpty())addSuperParse();
         }
         // 获取默认解析
         if (parseBeanList != null && parseBeanList.size() > 0) {
@@ -637,8 +654,12 @@ public class ApiConfig {
         bReader.close();
         parseLiveJson(apiUrl, sb.toString());
     }
+
+    private String liveSpider="";
     private void parseLiveJson(String apiUrl, String jsonStr) {
         JsonObject infoJson = gson.fromJson(jsonStr, JsonObject.class);
+        // spider
+        liveSpider = DefaultConfig.safeJsonString(infoJson, "spider", "");
         // 直播源
         initLiveSettings();
         if(infoJson.has("lives")){
@@ -787,7 +808,7 @@ public class ApiConfig {
                 }
             } else {
                 String type= livesOBJ.get("type").getAsString();
-                if(type.equals("0")){
+                if(type.equals("0") || type.equals("3")){
                     url = livesOBJ.get("url").getAsString();
                     if(!url.startsWith("http://127.0.0.1")){
                         if(url.startsWith("http")){
@@ -795,7 +816,15 @@ public class ApiConfig {
                         }
                         url ="http://127.0.0.1:9978/proxy?do=live&type=txt&ext="+url;
                     }
-                    LOG.i("echo-url:"+url);
+                    if(type.equals("3")){
+                        String jarUrl = livesOBJ.get("jar").getAsString().trim();
+                        if(!jarUrl.isEmpty()){
+                            jarLoader.loadLiveJar(jarUrl);
+                        }else if(!liveSpider.isEmpty()){
+                            jarLoader.loadLiveJar(liveSpider);
+                        }
+                    }
+                    LOG.i("echo-live-proxy-url:"+url);
                 }else {
                     return;
                 }
@@ -828,6 +857,12 @@ public class ApiConfig {
         }
     }
 
+    public void setLiveJar(String liveJar)
+    {
+        String jarUrl=!liveJar.isEmpty()?liveJar:liveSpider;
+        jarLoader.setRecentJarKey(MD5.string2MD5(jarUrl));
+    }
+
     public String getSpider() {
         return spider;
     }
@@ -838,7 +873,7 @@ public class ApiConfig {
         return jarLoader.getSpider(sourceBean.getKey(), sourceBean.getApi(), sourceBean.getExt(), sourceBean.getJar());
     }
 
-    public Object[] proxyLocal(Map param) {
+    public Object[] proxyLocal(Map<String,String> param) {
         return jarLoader.proxyInvoke(param);
     }
 
@@ -974,5 +1009,20 @@ public class ApiConfig {
 
     public Map<String,String> getMyHost() {
         return myHosts;
+    }
+
+    public void clearJarLoader()
+    {
+        jarLoader.clear();
+    }
+
+    private void addSuperParse()
+    {
+        ParseBean superPb = new ParseBean();
+        superPb.setName("超级解析");
+        superPb.setUrl("SuperParse");
+        superPb.setExt("");
+        superPb.setType(4);
+        parseBeanList.add(0, superPb);
     }
 }

@@ -37,6 +37,7 @@ import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.SearchHelper;
 import com.github.tvbox.osc.util.js.JSEngine;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -100,24 +101,6 @@ public class SearchActivity extends BaseActivity {
         initData();
         hasKeyBoard = true;
         isSearchBack = false;
-    }
-
-    /*
-     * 禁止软键盘
-     * @param activity Activity
-     */
-    public static void disableKeyboard(Activity activity) {
-        hasKeyBoard = false;
-        activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
-    }
-
-    /*
-     * 启用软键盘
-     * @param activity Activity
-     */
-    public static void enableKeyboard(Activity activity) {
-        hasKeyBoard = true;
-        activity.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
     }
 
     public void openSystemKeyBoard() {
@@ -255,6 +238,7 @@ public class SearchActivity extends BaseActivity {
             @Override
             public void onClick(View v) {
                 FastClickCheckUtil.check(v);
+                initData();
                 etSearch.setText("");
             }
         });
@@ -271,6 +255,10 @@ public class SearchActivity extends BaseActivity {
                             bundle.putString("title", wd);
                             jumpActivity(FastSearchActivity.class, bundle);
                         } else {
+                            InputMethodManager imm = (InputMethodManager) mContext.getSystemService(Context.INPUT_METHOD_SERVICE);
+                            if (imm != null) {
+                                imm.hideSoftInputFromWindow(etSearch.getWindowToken(), 0);
+                            }
                             search(wd);
                         }
                     } else {
@@ -360,51 +348,35 @@ public class SearchActivity extends BaseActivity {
      * 拼音联想
      */
     private void loadRec(String key) {
-//        OkGo.<String>get("https://s.video.qq.com/smartbox")
-//                .params("plat", 2)
-//                .params("ver", 0)
-//                .params("num", 20)
-//                .params("otype", "json")
-//                .params("query", key)
-//                .execute(new AbsCallback<String>() {
-//                    @Override
-//                    public void onSuccess(Response<String> response) {
-//                        try {
-//                            ArrayList<String> hots = new ArrayList<>();
-//                            String result = response.body();
-//                            JsonObject json = JsonParser.parseString(result.substring(result.indexOf("{"), result.lastIndexOf("}") + 1)).getAsJsonObject();
-//                            JsonArray itemList = json.get("item").getAsJsonArray();
-//                            for (JsonElement ele : itemList) {
-//                                JsonObject obj = (JsonObject) ele;
-//                                hots.add(obj.get("word").getAsString().trim().replaceAll("<|>|《|》|-", "").split(" ")[0]);
-//                            }
-//                            wordAdapter.setNewData(hots);
-//                        } catch (Throwable th) {
-//                            th.printStackTrace();
-//                        }
-//                    }
-//
-//                    @Override
-//                    public String convertResponse(okhttp3.Response response) throws Throwable {
-//                        return response.body().string();
-//                    }
-//                });
-        OkGo.<String>get("https://suggest.video.iqiyi.com/")
-                .params("if", "mobile")
+        OkGo.get("https://tv.aiseet.atianqi.com/i-tvbin/qtv_video/search/get_search_smart_box")
+                .params("format", "json")
+                .params("page_num", 0)
+                .params("page_size", 20)
                 .params("key", key)
-                .execute(new AbsCallback<String>() {
+                .execute(new AbsCallback() {
                     @Override
-                    public void onSuccess(Response<String> response) {
+                    public void onSuccess(Response response) {
                         try {
-                            ArrayList<String> hots = new ArrayList<>();
-                            String result = response.body();
-                            JsonObject json = JsonParser.parseString(result).getAsJsonObject();
-                            JsonArray itemList = json.get("data").getAsJsonArray();
-                            for (JsonElement ele : itemList) {
-                                JsonObject obj = (JsonObject) ele;
-                                hots.add(obj.get("name").getAsString().trim().replaceAll("<|>|《|》|-", ""));
+                            ArrayList hots = new ArrayList<>();
+                            String result = (String) response.body();
+                            Gson gson = new Gson();
+                            JsonElement json = gson.fromJson(result, JsonElement.class);
+                            JsonArray groupDataArr = json.getAsJsonObject()
+                                    .get("data").getAsJsonObject()
+                                    .get("search_data").getAsJsonObject()
+                                    .get("vecGroupData").getAsJsonArray()
+                                    .get(0).getAsJsonObject()
+                                    .get("group_data").getAsJsonArray();
+                            for (JsonElement groupDataElement : groupDataArr) {
+                                JsonObject groupData = groupDataElement.getAsJsonObject();
+                                String keywordTxt = groupData.getAsJsonObject("dtReportInfo")
+                                        .getAsJsonObject("reportData")
+                                        .get("keyword_txt").getAsString();
+                                hots.add(keywordTxt.trim());
                             }
+                            wordsSwitch.setText("猜你 想搜");
                             wordAdapter.setNewData(hots);
+                            mGridViewWord.smoothScrollToPosition(0);
                         } catch (Throwable th) {
                             th.printStackTrace();
                         }
@@ -432,7 +404,7 @@ public class SearchActivity extends BaseActivity {
                 search(title);
             }
         }
-
+        wordsSwitch.setText("热词 | 历史");
         if(hots!=null && !hots.isEmpty()){
             wordAdapter.setNewData(hots);
             return;
