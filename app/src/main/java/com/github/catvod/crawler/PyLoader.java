@@ -2,8 +2,17 @@ package com.github.catvod.crawler;
 
 import android.util.Log;
 
+import com.chaquo.python.PyObject;
 import com.github.tvbox.osc.base.App;
+import com.github.tvbox.osc.util.LOG;
+import com.github.tvbox.osc.util.MD5;
 import com.undcover.freedom.pyramid.PythonLoader;
+import com.undcover.freedom.pyramid.PythonSpider;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.lang.reflect.Field;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 public class PyLoader {
@@ -20,6 +29,11 @@ public class PyLoader {
             pythonLoader.setConfig(jsonStr);
             lastConfig = jsonStr;
         }
+    }
+
+    private String recentPyApi;
+    public void setRecentPyKey(String pyApi) {
+        recentPyApi=pyApi;
     }
     public Spider getSpider(String key, String cls, String ext) {
         if (spiders.containsKey(key)){
@@ -47,6 +61,64 @@ public class PyLoader {
             th.printStackTrace();
         }
         return null;
+    }
+
+    public Object[] proxyInvoke(Map<String,String> params) {
+        try {
+            LOG.i("echo-recentPyApi"+recentPyApi);
+//            return (Object[])pythonLoader.proxyLocal(MD5.string2MD5(recentPyApi), recentPyApi, params);
+            PythonSpider originalSpider = (PythonSpider) pythonLoader.getSpider(MD5.string2MD5(recentPyApi), recentPyApi);
+            PythonSpiderWrapper wrapper = new PythonSpiderWrapper(originalSpider);
+            //            LOG.i("echo-list:---"+wrapper.liveContent(recentPyApi));
+            return wrapper.proxyLocal(params);
+        } catch (Throwable th) {
+            LOG.i("echo-Throwable:---"+th.getMessage());
+            th.printStackTrace();
+        }
+        return null;
+    }
+
+    public static class PythonSpiderWrapper {
+        private final PythonSpider spider;
+
+        public PythonSpiderWrapper(PythonSpider spider) {
+            this.spider = spider;
+        }
+
+        public Object[] proxyLocal(Map<String,String> param) {
+            try {
+                // 使用反射获取私有字段 app
+                Field appField = PythonSpider.class.getDeclaredField("app");
+                appField.setAccessible(true);
+                PyObject app = (PyObject) appField.get(spider);
+
+                // 使用反射获取私有字段 pySpider
+                Field pySpiderField = PythonSpider.class.getDeclaredField("pySpider");
+                pySpiderField.setAccessible(true);
+                PyObject pySpider = (PyObject) pySpiderField.get(spider);
+
+                // 调用 Python 接口获取原始结果
+                assert app != null;
+                List<PyObject> poList = app.callAttr("localProxy",
+                        new Object[]{pySpider, spider.map2json(param).toString()}).asList();
+                // 提取前三个元素
+                int code = poList.get(0).toInt();
+                String type = poList.get(1).toString();
+                String action = poList.get(2).toString();
+//                LOG.i("echo-action:---"+action);
+                InputStream stream = new ByteArrayInputStream(action.getBytes("utf8"));
+                // 如果存在第四个元素，则将其转换为 Map，否则设为 null
+                Object extra = null;
+                if (poList.size() > 3) {
+                    extra = poList.get(3).toJava(Map.class);
+                }
+
+                return new Object[]{code, type, stream, extra};
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
     }
 
     private String getPyUrl(String api,String ext)

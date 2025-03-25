@@ -27,6 +27,7 @@ import androidx.core.content.ContextCompat;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.chad.library.adapter.base.BaseQuickAdapter;
+import com.github.catvod.crawler.Spider;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.base.App;
@@ -87,6 +88,13 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TimeZone;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -932,8 +940,17 @@ public class LivePlayActivity extends BaseActivity {
             logoUrl = livesOBJ.get("logo").getAsString();
         }
         if(type.equals("3")){
-            String jarUrl=livesOBJ.has("jar")?livesOBJ.get("jar").getAsString():"";
-            ApiConfig.get().setLiveJar(jarUrl);
+            String py_jar="";
+            if(livesOBJ.has("jar")){
+                py_jar=livesOBJ.has("jar")?livesOBJ.get("jar").getAsString():"";
+
+            }else if(livesOBJ.has("api")){
+                py_jar=livesOBJ.has("api")?livesOBJ.get("api").getAsString():"";
+//                String ext = livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString():"{}";
+//                LOG.i("echo-ext:"+ext);
+                py_jar=py_jar+"?extend="+(livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString():"{}");
+            }
+            ApiConfig.get().setLiveJar(py_jar);
         }
     }
 
@@ -1849,55 +1866,133 @@ public class LivePlayActivity extends BaseActivity {
         showLoading();
 
         LOG.i("echo-live-url:"+url);
-        OkGo.<String>get(url).execute(new AbsCallback<String>() {
 
-            @Override
-            public String convertResponse(okhttp3.Response response) throws Throwable {
-                assert response.body() != null;
-                return response.body().string();
-            }
+        if(url.contains(".py")){
+            String finalUrl = url;
+            Runnable waitResponse = new Runnable() {
+                @Override
+                public void run() {
+                    ExecutorService executor = Executors.newSingleThreadExecutor();
+                    Future<String> future = executor.submit(new Callable<String>() {
+                        @Override
+                        public String call() throws Exception {
+                            Spider sp = ApiConfig.get().getPyCSP(finalUrl);
+                            String json=sp.homeContent(true);
+                            LOG.i("echo--loadProxyLives-json--"+json);
+                            return json;
+                        }
+                    });
+                    String sortJson = null;
+                    try {
+                        sortJson = future.get(10, TimeUnit.SECONDS);
+                    } catch (TimeoutException e) {
+                        e.printStackTrace();
+                        future.cancel(true);
+                    } catch (InterruptedException | ExecutionException e) {
+                        e.printStackTrace();
+                    } finally {
+                        // 将字符串转换为 JSONObject
+                        try {
+                            JSONObject jsonObject = new JSONObject(sortJson);
+                            sortJson = jsonObject.getString("liveList");
+                        } catch (JSONException e) {
+                            Toast.makeText(App.getInstance(), "加载错误,请重试", Toast.LENGTH_SHORT).show();
+                            JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
+                            Hawk.put(HawkConfig.LIVE_GROUP_INDEX,Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)+1);
+                            if(Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)>live_groups.size()-1){
+                                Hawk.put(HawkConfig.LIVE_GROUP_INDEX,0);
+                            }
+                            mHandler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    jumpActivity(HomeActivity.class);
+                                }
+                            });
+                            return;
+                        }
+                        JsonArray livesArray;
+                        LinkedHashMap<String, LinkedHashMap<String, ArrayList<String>>> linkedHashMap = new LinkedHashMap<>();
+                        TxtSubscribe.parse(linkedHashMap, sortJson);
+                        livesArray = TxtSubscribe.live2JsonArray(linkedHashMap);
 
-            @Override
-            public void onSuccess(Response<String> response) {
-                JsonArray livesArray;
-                LinkedHashMap<String, LinkedHashMap<String, ArrayList<String>>> linkedHashMap = new LinkedHashMap<>();
-                TxtSubscribe.parse(linkedHashMap, response.body());
-                livesArray = TxtSubscribe.live2JsonArray(linkedHashMap);
+                        ApiConfig.get().loadLives(livesArray);
+                        List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
+                        if (list.isEmpty()) {
+                            Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
+                            finish();
+                            return;
+                        }
+                        liveChannelGroupList.clear();
+                        liveChannelGroupList.addAll(list);
 
-                ApiConfig.get().loadLives(livesArray);
-                List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
-                if (list.isEmpty()) {
-                    Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
-                    finish();
-                    return;
-                }
-                liveChannelGroupList.clear();
-                liveChannelGroupList.addAll(list);
-
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        LivePlayActivity.this.showSuccess();
-                        initLiveState();
+                        mHandler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                LivePlayActivity.this.showSuccess();
+                                initLiveState();
+                            }
+                        });
+                        try {
+                            executor.shutdown();
+                        } catch (Throwable th) {
+                            th.printStackTrace();
+                        }
                     }
-                });
-            }
-            @Override
-            public void onError(Response<String> response) {
-                Toast.makeText(App.getInstance(), "加载错误,请重试", Toast.LENGTH_SHORT).show();
-                JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
-                Hawk.put(HawkConfig.LIVE_GROUP_INDEX,Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)+1);
-                if(Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)>live_groups.size()-1){
-                    Hawk.put(HawkConfig.LIVE_GROUP_INDEX,0);
                 }
-                mHandler.post(new Runnable() {
-                    @Override
-                    public void run() {
-                        jumpActivity(HomeActivity.class);
+            };
+            Executors.newSingleThreadExecutor().execute(waitResponse);
+        }else {
+            OkGo.<String>get(url).execute(new AbsCallback<String>() {
+
+                @Override
+                public String convertResponse(okhttp3.Response response) throws Throwable {
+                    assert response.body() != null;
+                    return response.body().string();
+                }
+
+                @Override
+                public void onSuccess(Response<String> response) {
+                    JsonArray livesArray;
+                    LinkedHashMap<String, LinkedHashMap<String, ArrayList<String>>> linkedHashMap = new LinkedHashMap<>();
+                    TxtSubscribe.parse(linkedHashMap, response.body());
+                    livesArray = TxtSubscribe.live2JsonArray(linkedHashMap);
+
+                    ApiConfig.get().loadLives(livesArray);
+                    List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
+                    if (list.isEmpty()) {
+                        Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
+                        finish();
+                        return;
                     }
-                });
-            }
-        });
+                    liveChannelGroupList.clear();
+                    liveChannelGroupList.addAll(list);
+
+                    mHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            LivePlayActivity.this.showSuccess();
+                            initLiveState();
+                        }
+                    });
+                }
+                @Override
+                public void onError(Response<String> response) {
+                    Toast.makeText(App.getInstance(), "加载错误,请重试", Toast.LENGTH_SHORT).show();
+                    JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
+                    Hawk.put(HawkConfig.LIVE_GROUP_INDEX,Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)+1);
+                    if(Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)>live_groups.size()-1){
+                        Hawk.put(HawkConfig.LIVE_GROUP_INDEX,0);
+                    }
+                    mHandler.post(new Runnable() {
+                        @Override
+                        public void run() {
+                            jumpActivity(HomeActivity.class);
+                        }
+                    });
+                }
+            });
+
+        }
     }
 
     private void initLiveState() {
