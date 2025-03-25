@@ -246,6 +246,7 @@ public class HomeActivity extends BaseActivity {
                     File cspCacheDir = new File(cspCachePath + MD5.string2MD5(jarUrl)+".jar");
                     Toast.makeText(mContext, "jar缓存已清除", Toast.LENGTH_LONG).show();
                     if (!cspCacheDir.exists()){
+                        refreshHome();
                         return;
                     }
                     new Thread(() -> {
@@ -670,27 +671,27 @@ public class HomeActivity extends BaseActivity {
             ViewGroup.LayoutParams clp = cl_root.getLayoutParams();
             clp.width = AutoSizeUtils.mm2px(mSiteSwitchDialog.getContext(), 380 + 200 * spanCount);
             mSiteSwitchDialog.setTip("请选择首页数据源");
-            mSiteSwitchDialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<SourceBean>() {
-                @Override
-                public void click(SourceBean value, int pos) {
-                    ApiConfig.get().setSourceBean(value);
-                    refreshHome();
-                }
-                @Override
-                public String getDisplay(SourceBean val) {
-                    return val.getName();
-                }
-            }, new DiffUtil.ItemCallback<SourceBean>() {
-                @Override
-                public boolean areItemsTheSame(@NonNull SourceBean oldItem, @NonNull SourceBean newItem) {
-                    return oldItem == newItem;
-                }
-                @Override
-                public boolean areContentsTheSame(@NonNull SourceBean oldItem, @NonNull SourceBean newItem) {
-                    return oldItem.getKey().equals(newItem.getKey());
-                }
-            }, sites, select);
         }
+        mSiteSwitchDialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<SourceBean>() {
+            @Override
+            public void click(SourceBean value, int pos) {
+                ApiConfig.get().setSourceBean(value);
+                refreshHome();
+            }
+            @Override
+            public String getDisplay(SourceBean val) {
+                return val.getName();
+            }
+        }, new DiffUtil.ItemCallback<SourceBean>() {
+            @Override
+            public boolean areItemsTheSame(@NonNull SourceBean oldItem, @NonNull SourceBean newItem) {
+                return oldItem == newItem;
+            }
+            @Override
+            public boolean areContentsTheSame(@NonNull SourceBean oldItem, @NonNull SourceBean newItem) {
+                return oldItem.getKey().equals(newItem.getKey());
+            }
+        }, sites, select);
         mSiteSwitchDialog.show();
     }
 
