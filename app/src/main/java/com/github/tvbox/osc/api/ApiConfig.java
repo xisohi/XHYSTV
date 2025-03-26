@@ -7,8 +7,9 @@ import android.util.Base64;
 
 import com.github.catvod.crawler.JarLoader;
 import com.github.catvod.crawler.JsLoader;
-import com.github.catvod.crawler.PyLoader;
+import com.github.catvod.crawler.pyLoader;
 import com.github.catvod.crawler.Spider;
+import com.github.catvod.crawler.python.IPyLoader;
 import com.github.tvbox.osc.base.App;
 import com.github.tvbox.osc.bean.LiveChannelGroup;
 import com.github.tvbox.osc.bean.IJKCode;
@@ -77,7 +78,7 @@ public class ApiConfig {
 
     private final JarLoader jarLoader = new JarLoader();
     private final JsLoader jsLoader = new JsLoader();
-    private final PyLoader pyLoader = new PyLoader();
+    private final IPyLoader pyLoader =  new pyLoader();
     private final Gson gson;
 
     private final String userAgent = "okhttp/3.15";
@@ -264,7 +265,7 @@ public class ApiConfig {
                     public void onSuccess(Response<String> response) {
                         try {
                             String json = response.body();
-                            LOG.i("echo-ConfigJson"+json);
+//                            LOG.i("echo-ConfigJson"+json);
                             parseJson(apiUrl, json);
                             FileUtils.saveCache(cache,json);
                             callback.success();
@@ -892,7 +893,7 @@ public class ApiConfig {
         if (sourceBean.getApi().endsWith(".js") || sourceBean.getApi().contains(".js?")){
             return jsLoader.getSpider(sourceBean.getKey(), sourceBean.getApi(), sourceBean.getExt(), sourceBean.getJar());
         }
-        else if (sourceBean.getKey().startsWith("py_")) {
+        else if (sourceBean.getApi().contains(".py")) {
             return pyLoader.getSpider(sourceBean.getKey(), sourceBean.getApi(), sourceBean.getExt());
         }
         else return jarLoader.getSpider(sourceBean.getKey(), sourceBean.getApi(), sourceBean.getExt(), sourceBean.getJar());
@@ -912,7 +913,7 @@ public class ApiConfig {
                 return jarLoader.proxyInvoke(param);
             }
         }else {
-            if (sourceBean.getKey().startsWith("py_")) {
+            if (sourceBean.getApi().contains(".py")) {
                 return pyLoader.proxyInvoke(param);
             }else {
                 return jarLoader.proxyInvoke(param);

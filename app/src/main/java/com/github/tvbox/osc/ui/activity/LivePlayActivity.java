@@ -946,9 +946,10 @@ public class LivePlayActivity extends BaseActivity {
 
             }else if(livesOBJ.has("api")){
                 py_jar=livesOBJ.has("api")?livesOBJ.get("api").getAsString():"";
-//                String ext = livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString():"{}";
-//                LOG.i("echo-ext:"+ext);
-                py_jar=py_jar+"?extend="+(livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString():"{}");
+                String ext = livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString():"{}";
+                String encodedParam = URLEncoder.encode(ext);
+                LOG.i("echo-ext:"+ext);
+                py_jar=py_jar+"?extend="+(livesOBJ.has("ext")?encodedParam:"{}");
             }
             ApiConfig.get().setLiveJar(py_jar);
         }
@@ -1884,7 +1885,7 @@ public class LivePlayActivity extends BaseActivity {
                     });
                     String sortJson = null;
                     try {
-                        sortJson = future.get(10, TimeUnit.SECONDS);
+                        sortJson = future.get(6, TimeUnit.SECONDS);
                     } catch (TimeoutException e) {
                         e.printStackTrace();
                         future.cancel(true);
@@ -1893,10 +1894,10 @@ public class LivePlayActivity extends BaseActivity {
                     } finally {
                         // 将字符串转换为 JSONObject
                         try {
+                            assert sortJson != null;
                             JSONObject jsonObject = new JSONObject(sortJson);
                             sortJson = jsonObject.getString("liveList");
                         } catch (JSONException e) {
-                            Toast.makeText(App.getInstance(), "加载错误,请重试", Toast.LENGTH_SHORT).show();
                             JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
                             Hawk.put(HawkConfig.LIVE_GROUP_INDEX,Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)+1);
                             if(Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)>live_groups.size()-1){
@@ -1905,6 +1906,8 @@ public class LivePlayActivity extends BaseActivity {
                             mHandler.post(new Runnable() {
                                 @Override
                                 public void run() {
+                                    Toast.makeText(App.getInstance(), "加载错误,请重试", Toast.LENGTH_SHORT).show();
+
                                     jumpActivity(HomeActivity.class);
                                 }
                             });
