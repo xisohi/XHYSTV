@@ -50,6 +50,7 @@ import com.github.tvbox.osc.ui.adapter.LiveSettingItemAdapter;
 import com.github.tvbox.osc.ui.adapter.MyEpgAdapter;
 import com.github.tvbox.osc.ui.dialog.LivePasswordDialog;
 import com.github.tvbox.osc.ui.tv.widget.ViewObj;
+import com.github.tvbox.osc.util.DefaultConfig;
 import com.github.tvbox.osc.util.EpgUtil;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
@@ -946,10 +947,15 @@ public class LivePlayActivity extends BaseActivity {
 
             }else if(livesOBJ.has("api")){
                 py_jar=livesOBJ.has("api")?livesOBJ.get("api").getAsString():"";
-                String ext = livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString():"{}";
-                String encodedParam = URLEncoder.encode(ext);
+//                String ext = livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString():"";
+                String ext="";
+                if(livesOBJ.has("ext") && (livesOBJ.get("ext").isJsonObject() || livesOBJ.get("ext").isJsonArray())){
+                    ext=livesOBJ.get("ext").toString();
+                }else {
+                    ext= DefaultConfig.safeJsonString(livesOBJ, "ext", "");
+                }
                 LOG.i("echo-ext:"+ext);
-                py_jar=py_jar+"?extend="+(livesOBJ.has("ext")?encodedParam:"{}");
+                if(!ext.isEmpty())py_jar=py_jar+"?extend="+ext;
             }
             ApiConfig.get().setLiveJar(py_jar);
         }
@@ -1877,8 +1883,9 @@ public class LivePlayActivity extends BaseActivity {
                     Future<String> future = executor.submit(new Callable<String>() {
                         @Override
                         public String call() throws Exception {
+                            LOG.i("echo--loadProxyLives-json--");
                             Spider sp = ApiConfig.get().getPyCSP(finalUrl);
-                            String json=sp.homeContent(true);
+                            String json=sp.liveContent(finalUrl);
                             LOG.i("echo--loadProxyLives-json--"+json);
                             return json;
                         }
@@ -1893,26 +1900,26 @@ public class LivePlayActivity extends BaseActivity {
                         e.printStackTrace();
                     } finally {
                         // 将字符串转换为 JSONObject
-                        try {
-                            assert sortJson != null;
-                            JSONObject jsonObject = new JSONObject(sortJson);
-                            sortJson = jsonObject.getString("liveList");
-                        } catch (JSONException e) {
-                            JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
-                            Hawk.put(HawkConfig.LIVE_GROUP_INDEX,Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)+1);
-                            if(Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)>live_groups.size()-1){
-                                Hawk.put(HawkConfig.LIVE_GROUP_INDEX,0);
-                            }
-                            mHandler.post(new Runnable() {
-                                @Override
-                                public void run() {
-                                    Toast.makeText(App.getInstance(), "加载错误,请重试", Toast.LENGTH_SHORT).show();
-
-                                    jumpActivity(HomeActivity.class);
-                                }
-                            });
-                            return;
-                        }
+//                        try {
+//                            assert sortJson != null;
+//                            JSONObject jsonObject = new JSONObject(sortJson);
+//                            sortJson = jsonObject.getString("liveList");
+//                        } catch (JSONException e) {
+//                            JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
+//                            Hawk.put(HawkConfig.LIVE_GROUP_INDEX,Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)+1);
+//                            if(Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)>live_groups.size()-1){
+//                                Hawk.put(HawkConfig.LIVE_GROUP_INDEX,0);
+//                            }
+//                            mHandler.post(new Runnable() {
+//                                @Override
+//                                public void run() {
+//                                    Toast.makeText(App.getInstance(), "加载错误,请重试", Toast.LENGTH_SHORT).show();
+//
+//                                    jumpActivity(HomeActivity.class);
+//                                }
+//                            });
+//                            return;
+//                        }
                         JsonArray livesArray;
                         LinkedHashMap<String, LinkedHashMap<String, ArrayList<String>>> linkedHashMap = new LinkedHashMap<>();
                         TxtSubscribe.parse(linkedHashMap, sortJson);

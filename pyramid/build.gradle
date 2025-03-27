@@ -1,0 +1,57 @@
+plugins {
+    id 'com.android.library'
+    id 'com.chaquo.python'
+}
+
+android {
+    compileSdk 30
+
+    defaultConfig {
+        minSdkVersion 16
+        targetSdkVersion 28
+        consumerProguardFiles "consumer-rules.pro"
+        ndk {
+            //abiFilters 'arm64-v8a'
+            abiFilters "armeabi-v7a"
+        }
+        python {
+//            version "3.8"
+            buildPython("D:/Programs/Python/Python38/python.exe")
+            pip {
+                install "lxml"
+                install "ujson"
+                install "pyquery"
+                install "requests"
+                install "jsonpath"
+                install "cachetools"
+                install 'pycryptodome'
+                install 'beautifulsoup4'
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    sourceSets {
+        main{
+            // Android代码模块
+            setRoot "src/main"
+            // Python代码模块，也就是你的Python源码所在项目中的文件夹
+            python.srcDirs = ["src/python"]
+        }
+    }
+    buildToolsVersion '30.0.2'
+}
+
+dependencies {
+
+}

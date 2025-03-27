@@ -5,7 +5,6 @@ android {
 
     defaultConfig {
         applicationId 'com.github.tvbox.osc'
-        minSdkVersion 16
         targetSdkVersion 28
         versionCode 250308
         versionName '25.03.08'
@@ -26,11 +25,13 @@ android {
     productFlavors {
         normal {
             dimension "mode"
+            minSdkVersion 16
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         python {
             dimension "mode"
             // 配置Python打包特有的设置（如有需要）
+            minSdkVersion 16
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-python.pro'
         }
     }
@@ -115,6 +116,7 @@ dependencies {
     implementation 'com.github.xuexiangjys:XUpdate:2.1.5'
     implementation project(":player")
     implementation project(":quickjs")
+    pythonImplementation project(":pyramid")
 
 //    implementation('org.xwalk:xwalk_shared_library:23.53.589.4') {
 //        exclude group: 'com.android.support'
@@ -129,11 +131,12 @@ dependencies {
     implementation 'commons-io:commons-io:2.11.0'
     implementation 'com.googlecode.juniversalchardet:juniversalchardet:1.0.3'
 //    implementation(name:'pyramid',ext:'aar')
-    pythonImplementation(name:'pyramid', ext:'aar')
+//    pythonImplementation(name:'pyramid', ext:'aar')
     implementation(name:'xwalk_shared_library-23.53.589.4',ext:'aar')
     //支持http3
     implementation ('com.google.net.cronet:cronet-okhttp:0.1.0')
 //    implementation 'com.google.android.gms:play-services-cronet:18.0.1'
     implementation ('org.chromium.net:cronet-embedded:101.4951.41')
+    implementation 'org.brotli:dec:0.1.2'
 }
 

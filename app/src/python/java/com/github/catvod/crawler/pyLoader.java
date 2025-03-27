@@ -11,7 +11,9 @@ import com.undcover.freedom.pyramid.PythonLoader;
 import com.undcover.freedom.pyramid.PythonSpider;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Field;
+import java.net.URLEncoder;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -48,10 +50,19 @@ public class pyLoader implements IPyLoader {
             return spiders.get(key);
         }
         try {
-            Spider sp = pythonLoader.getSpider(key, getPyUrl(cls, ext));
-            spiders.put(key, sp);
+            Log.i("PyLoader", "echo-getSpider url: " + getPyUrl(cls, ext));
+            PythonSpider sp = (PythonSpider) pythonLoader.getSpider(key, getPyUrl(cls, ext));
+
+//            sp.init(App.getInstance(),getPyUrl(cls, ext));
+//            PythonSpiderWrapper wrapper = new PythonSpiderWrapper(sp);
+//            wrapper.init(getPyUrl(cls, ext));
+//            Log.i("PyLoader", "echo-getSpider getName: " + wrapper.getName());
+//            Log.i("PyLoader", "echo-getSpider getName: " + sp.getName());
+//            Log.i("PyLoader", "echo-getSpider liveContent: " + sp.liveContent("true"));
+            Log.i("PyLoader", "echo-getSpider homeContent: " + sp.homeContent(true));
+            spiders.put(key, (Spider) sp);
             Log.i("PyLoader", "echo-getSpider 加载spider: " + key);
-            return sp;
+            return (Spider)sp;
         } catch (Throwable th) {
             th.printStackTrace();
         }
@@ -77,8 +88,9 @@ public class pyLoader implements IPyLoader {
         try {
             LOG.i("echo-recentPyApi" + recentPyApi);
             PythonSpider originalSpider = (PythonSpider) pythonLoader.getSpider(MD5.string2MD5(recentPyApi), recentPyApi);
-            PythonSpiderWrapper wrapper = new PythonSpiderWrapper(originalSpider);
-            return wrapper.proxyLocal(params);
+//            PythonSpiderWrapper wrapper = new PythonSpiderWrapper(originalSpider);
+//            return wrapper.proxyLocal(params);
+            return originalSpider.proxyLocal(params);
         } catch (Throwable th) {
             LOG.i("echo-Throwable:---" + th.getMessage());
             th.printStackTrace();
@@ -123,11 +135,79 @@ public class pyLoader implements IPyLoader {
                 return null;
             }
         }
+
+        public String getName() {
+            try {
+                // 反射获取私有字段 app
+                Field appField = PythonSpider.class.getDeclaredField("app");
+                appField.setAccessible(true);
+                PyObject app = (PyObject) appField.get(spider);
+
+                // 反射获取私有字段 pySpider
+                Field pySpiderField = PythonSpider.class.getDeclaredField("pySpider");
+                pySpiderField.setAccessible(true);
+                PyObject pySpider = (PyObject) pySpiderField.get(spider);
+
+                // 调用 Python 接口获取原始结果
+                assert app != null;
+                String poList = String.valueOf(app.callAttr("getName",
+                        new Object[]{pySpider}));
+                return poList;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        public String homeContent(boolean filter) {
+            try {
+                // 反射获取私有字段 app
+                Field appField = PythonSpider.class.getDeclaredField("app");
+                appField.setAccessible(true);
+                PyObject app = (PyObject) appField.get(spider);
+
+                // 反射获取私有字段 pySpider
+                Field pySpiderField = PythonSpider.class.getDeclaredField("pySpider");
+                pySpiderField.setAccessible(true);
+                PyObject pySpider = (PyObject) pySpiderField.get(spider);
+
+                // 调用 Python 接口获取原始结果
+                assert app != null;
+                String poList = String.valueOf(app.callAttr("homeContent",
+                        new Object[]{pySpider,filter}));
+                return poList;
+            } catch (Exception e) {
+                e.printStackTrace();
+                return null;
+            }
+        }
+
+        public void init(String filter) {
+            try {
+                // 反射获取私有字段 app
+                Field appField = PythonSpider.class.getDeclaredField("app");
+                appField.setAccessible(true);
+                PyObject app = (PyObject) appField.get(spider);
+
+                // 反射获取私有字段 pySpider
+                Field pySpiderField = PythonSpider.class.getDeclaredField("pySpider");
+                pySpiderField.setAccessible(true);
+                PyObject pySpider = (PyObject) pySpiderField.get(spider);
+
+                // 调用 Python 接口获取原始结果
+                assert app != null;
+                app.callAttr("init", new Object[]{pySpider,filter});
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 
-    private String getPyUrl(String api, String ext) {
+    private String getPyUrl(String api, String ext) throws UnsupportedEncodingException {
         StringBuilder urlBuilder = new StringBuilder(api);
         if (!ext.isEmpty()) {
+//            ext= URLEncoder.encode(ext,"utf8");
             urlBuilder.append(api.contains("?") ? "&" : "?").append("extend=").append(ext);
         }
         return urlBuilder.toString();

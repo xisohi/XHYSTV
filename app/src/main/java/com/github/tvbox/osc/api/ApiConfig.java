@@ -796,6 +796,7 @@ public class ApiConfig {
 
     public void loadLiveApi(JsonObject livesOBJ) {
         try {
+            LOG.i("echo-loadLiveApi");
             String lives = livesOBJ.toString();
             int index = lives.indexOf("proxy://");
             String url;
@@ -831,7 +832,14 @@ public class ApiConfig {
                         String pyApi = livesOBJ.has("api")?livesOBJ.get("api").getAsString().trim():"";
                         LOG.i("echo-pyApi1"+pyApi);
                         if(pyApi.contains(".py")){
-                            String ext=livesOBJ.has("ext")?livesOBJ.get("ext").getAsJsonObject().toString().trim():"";
+                            LOG.i("echo-pyLoader.getSpider");
+                            String ext="";
+                            if(livesOBJ.has("ext") && (livesOBJ.get("ext").isJsonObject() || livesOBJ.get("ext").isJsonArray())){
+                                ext=livesOBJ.get("ext").toString();
+                            }else {
+                                ext=DefaultConfig.safeJsonString(livesOBJ, "ext", "");
+                            }
+
                             pyLoader.getSpider(MD5.string2MD5(pyApi),pyApi,ext);
                         }
                         if(!jarUrl.isEmpty()){
@@ -1042,6 +1050,7 @@ public class ApiConfig {
 
     String fixContentPath(String url, String content) {
         if (content.contains("\"./")) {
+            url=url.replace("file://","clan://localhost/");
             if(!url.startsWith("http") && !url.startsWith("clan://")){
                 url = "http://" + url;
             }

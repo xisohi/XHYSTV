@@ -2,6 +2,7 @@ package xyz.doikki.videoplayer.exo;
 
 import android.content.Context;
 import android.content.res.AssetFileDescriptor;
+import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 
@@ -93,6 +94,7 @@ public class ExoMediaPlayer extends AbstractPlayer implements Player.Listener {
 
     @Override
     public void setDataSource(String path, Map<String, String> headers) {
+        Log.i("Tvbox-runtime","echo-setDataSource:"+path);
         mMediaSource = mMediaSourceHelper.getMediaSource(path, headers);
     }
 
