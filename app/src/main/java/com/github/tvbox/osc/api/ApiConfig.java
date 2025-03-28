@@ -864,11 +864,18 @@ public class ApiConfig {
                 Hawk.put(HawkConfig.LIVE_PLAY_TYPE,livePlayType);
             }
             //设置UA
-            if(livesOBJ.has("ua")){
-                String ua =livesOBJ.get("ua").getAsString();
-                HashMap<String,String> liveHeader=new HashMap<>();
-                liveHeader.put("User-Agent",ua);
-                Hawk.put(HawkConfig.LIVE_WEB_HEADER,liveHeader);
+            if(livesOBJ.has("header")) {
+                JsonObject headerObj = livesOBJ.getAsJsonObject("header");
+                HashMap<String, String> liveHeader = new HashMap<>();
+                for (Map.Entry<String, JsonElement> entry : headerObj.entrySet()) {
+                    liveHeader.put(entry.getKey(), entry.getValue().getAsString());
+                }
+                Hawk.put(HawkConfig.LIVE_WEB_HEADER, liveHeader);
+            } else if(livesOBJ.has("ua")) {
+                String ua = livesOBJ.get("ua").getAsString();
+                HashMap<String,String> liveHeader = new HashMap<>();
+                liveHeader.put("User-Agent", ua);
+                Hawk.put(HawkConfig.LIVE_WEB_HEADER, liveHeader);
             }else {
                 Hawk.put(HawkConfig.LIVE_WEB_HEADER,null);
             }
@@ -911,7 +918,7 @@ public class ApiConfig {
         return pyLoader.getSpider(MD5.string2MD5(url), url, "");
     }
 
-    public Object[] proxyLocal(Map<String,String> param) {
+    public Object[] proxyLocal(Map<String,String> param){
         SourceBean sourceBean = ApiConfig.get().getHomeSourceBean();
 
         if(Hawk.get(HawkConfig.PLAYER_IS_LIVE,false)){

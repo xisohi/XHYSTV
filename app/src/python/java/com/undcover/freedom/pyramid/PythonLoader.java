@@ -122,36 +122,29 @@ public class PythonLoader {
         }
         try {
             PythonSpider sp = new PythonSpider(key, cache);
-            sp.init(app, url);
+
+            Thread initThread = new Thread(() -> {
+                try {
+                    sp.init(app, url);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            });
+            initThread.start();
+            initThread.join(12_000);
+
+            if (initThread.isAlive()) {
+                PyLog.e("echo-init方法执行超时超时");
+                initThread.interrupt();
+                throw new Exception("echo-init方法执行超时");
+            }
+
             spiders.put(key, sp);
             return sp;
         } catch (Throwable th) {
             PyLog.e(th.toString());
         }
         return new SpiderNull();
-    }
-
-    public Object[] proxyLocal(String key, String url, Map<String, String> map) {
-        String what = map.get("do").toString();
-        try {
-            if (what.equals("ck")) {
-                return new Object[]{200, "text/plain; charset=utf-8", new ByteArrayInputStream("ok".getBytes("UTF-8"))};
-            }
-            if (what.equals("live")) {
-                String type = map.get("type");
-                if (type.equals("txt")) {
-                    String ext = map.get("ext");
-                    ext = new String(Base64.decode(ext, Base64.DEFAULT | Base64.URL_SAFE | Base64.NO_WRAP), "UTF-8");
-                    return TxtSubscribe.load(ext);
-                }
-                return null;
-            }
-            PythonSpider spider = (PythonSpider) getSpider(key, url);
-            return spider.proxyLocal(map);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return new Object[]{};
     }
 
     int port = -1;

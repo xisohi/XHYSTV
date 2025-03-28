@@ -41,6 +41,7 @@ android {
             minifyEnabled false
 
             ndk {
+                //noinspection ChromeOsAbiSupport
                 abiFilters 'armeabi-v7a'
             }
         }
@@ -48,13 +49,14 @@ android {
             minifyEnabled true
 
             ndk {
+                //noinspection ChromeOsAbiSupport
                 abiFilters 'armeabi-v7a'
             }
         }
     }
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
-            def flavorNames = variant.productFlavors.collect { it.name }.join('-')
+            def flavorNames = variant.productFlavors.collect { it.name == "normal" ? "java" : it.name }.join('-')
             // 构建自定义文件名
             def fileName = "TVBox_${variant.buildType.name}-${flavorNames}.apk"
             outputFileName = fileName
@@ -79,13 +81,10 @@ android {
 }
 
 repositories {
-    flatDir {
-        dirs 'libs'
-    }
+
 }
 dependencies {
-    api fileTree(dir: "libs", include: ["*.jar"])
-
+    api fileTree(dir: "libs", include: ["*.jar","*.aar"])
 
     implementation 'org.nanohttpd:nanohttpd:2.3.1'
     implementation 'com.google.zxing:core:3.3.0'
@@ -93,8 +92,8 @@ dependencies {
     implementation 'androidx.constraintlayout:constraintlayout:2.0.4'
     implementation 'androidx.lifecycle:lifecycle-extensions:2.2.0'
     implementation 'androidx.recyclerview:recyclerview:1.2.1'
-    implementation files('libs/thunder.jar')
-    implementation files('libs/commons-lang3-3.12.0.jar')
+//    implementation files('libs/thunder.jar')
+//    implementation files('libs/commons-lang3-3.12.0.jar')
 
 
     implementation 'com.squareup.okhttp3:okhttp:3.12.11'
@@ -118,9 +117,7 @@ dependencies {
     implementation project(":quickjs")
     pythonImplementation project(":pyramid")
 
-//    implementation('org.xwalk:xwalk_shared_library:23.53.589.4') {
-//        exclude group: 'com.android.support'
-//    }
+
     implementation 'com.lzy.net:okgo:3.0.4'
     // implementation 'com.tencent.bugly:crashreport_upgrade:latest.release'
     implementation 'com.owen:tv-recyclerview:3.0.0'
@@ -130,9 +127,6 @@ dependencies {
     implementation 'com.github.hedzr:android-file-chooser:v1.2.0-final'
     implementation 'commons-io:commons-io:2.11.0'
     implementation 'com.googlecode.juniversalchardet:juniversalchardet:1.0.3'
-//    implementation(name:'pyramid',ext:'aar')
-//    pythonImplementation(name:'pyramid', ext:'aar')
-    implementation(name:'xwalk_shared_library-23.53.589.4',ext:'aar')
     //支持http3
     implementation ('com.google.net.cronet:cronet-okhttp:0.1.0')
 //    implementation 'com.google.android.gms:play-services-cronet:18.0.1'

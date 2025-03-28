@@ -29,12 +29,6 @@ public class pyLoader implements IPyLoader {
     }
 
     @Override
-    public Object[] proxyInvoke(Map<String, String> params, String key, String api, String ext) {
-        Log.i("PyLoader", "normal flavor: proxyInvoke(params, key, api, ext) 调用，但不支持 Python 功能。");
-        return null;
-    }
-
-    @Override
     public Object[] proxyInvoke(Map<String, String> params) {
         Log.i("PyLoader", "normal flavor: proxyInvoke(params) 调用，但不支持 Python 功能。");
         return null;

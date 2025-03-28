@@ -41,29 +41,22 @@ public class SelectDialog<T> extends BaseDialog {
     public void setAdapter(SelectDialogAdapter.SelectDialogInterface<T> sourceBeanSelectDialogInterface,
                            DiffUtil.ItemCallback<T> sourceBeanItemCallback,
                            List<T> data, int select) {
+        final int selectIdx = select;
         SelectDialogAdapter<T> adapter = new SelectDialogAdapter<>(sourceBeanSelectDialogInterface, sourceBeanItemCallback);
         adapter.setData(data, select);
         TvRecyclerView tvRecyclerView = findViewById(R.id.list);
         tvRecyclerView.setAdapter(adapter);
-        tvRecyclerView.post(() -> {
-            RecyclerView.LayoutManager layoutManager = tvRecyclerView.getLayoutManager();
-            if (layoutManager instanceof GridLayoutManager) {
-                GridLayoutManager gridLayoutManager = (GridLayoutManager) layoutManager;
-                int spanCount = gridLayoutManager.getNumColumns();
-                int rowIndex = select / spanCount;
-                int firstVisibleRow = gridLayoutManager.getFirstVisiblePosition() / spanCount;
-                int lastVisibleRow = gridLayoutManager.getLastVisiblePosition() / spanCount;
-                // 平滑滚动并调整位置
-                if (rowIndex < firstVisibleRow || rowIndex > lastVisibleRow) {
-                    int offset = tvRecyclerView.getHeight() / 3;
-                    gridLayoutManager.scrollToPositionWithOffset(select, offset);
+        tvRecyclerView.setSelectedPosition(select);
+        if (select<10){
+            tvRecyclerView.setSelection(select);
+        }
+        tvRecyclerView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (selectIdx >= 10) {
+                    tvRecyclerView.smoothScrollToPosition(selectIdx);
+                    tvRecyclerView.setSelectionWithSmooth(selectIdx);
                 }
-//                tvRecyclerView.postDelayed(() -> tvRecyclerView.smoothScrollToPosition(select), 200);
-            } else if (layoutManager instanceof LinearLayoutManager) {
-                LinearLayoutManager linearLayoutManager = (LinearLayoutManager) layoutManager;
-                int offset = tvRecyclerView.getHeight() / 3;
-                linearLayoutManager.scrollToPositionWithOffset(select, offset);
-//                tvRecyclerView.postDelayed(() -> tvRecyclerView.smoothScrollToPosition(select), 200);
             }
         });
     }

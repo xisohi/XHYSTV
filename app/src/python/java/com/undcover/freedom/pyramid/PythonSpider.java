@@ -14,11 +14,10 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class PythonSpider extends Spider {
     PyObject app;
@@ -67,7 +66,7 @@ public class PythonSpider extends Spider {
             }
             app.callAttr("init", pySpider, extInfo);
             loadSuccess = true;
-            Log.i("PyLoader", "echo-init extInfo: " + extInfo);
+            Log.i("PyLoader", "echo-init extInfo: " +url+ extInfo);
             PyLog.d(name + ": 下載插件成功！");
         } else {
             PyToast.showCancelableToast(name + "下载插件失败");
@@ -153,36 +152,41 @@ public class PythonSpider extends Spider {
 //        return new Object[]{code, type, stream, extra};
 //    }
 
-    public Object[] proxyLocal(Map params) {
-        Log.i("tvbox","echo-proxyLocal"+params.toString());
+    public Object[] proxyLocal(Map<String,String> params) {
+        Log.i("PyLoader","echo-proxyLocal:param"+params.toString());
         List<PyObject> list = app.callAttr("localProxy", pySpider, map2json(params).toString()).asList();
         boolean base64 = list.size() > 4 && list.get(4).toInt() == 1;
-        boolean header = list.size() > 3 && list.get(3) != null;
+        boolean headerAvailable = list.size() > 3 && list.get(3) != null;
         Object[] result = new Object[4];
         result[0] = list.get(0).toInt();
         result[1] = list.get(1).toString();
         result[2] = getStream(list.get(2), base64);
-        result[3] = header ? getHeader(list.get(3)) : null;
+        result[3] = headerAvailable ? getHeader(list.get(3)) : null;
+//        result[3] = null;
         return result;
     }
 
 
-    private Map<String, String> getHeader(PyObject obj) {
-        try {
-            Map<String, String> header = new HashMap<>();
-            for (Map.Entry<PyObject, PyObject> entry : obj.asMap().entrySet()) header.put(entry.getKey().toString(), entry.getValue().toString());
-            return header;
-        } catch (Exception e) {
+    private Map<String, String> getHeader(PyObject headerObj) {
+        if (headerObj == null) {
             return null;
         }
+        // 处理 headerObj
+        Map<String, String> headerMap = new HashMap<>();
+        for (PyObject key : headerObj.asMap().keySet()) {
+            headerMap.put(key.toString(), Objects.requireNonNull(headerObj.asMap().get(key)).toString());
+        }
+        return headerMap;
     }
 
     private ByteArrayInputStream getStream(PyObject o, boolean base64) {
-        Log.i("tvbox","echo-getStream"+o.toString());
-        if (o == null) return null;
-        if (o.type().toString().contains("bytes")) return new ByteArrayInputStream(o.toJava(byte[].class));
+        if (o == null) return new ByteArrayInputStream(new byte[0]);
+        String typeStr = o.type().toString();
+        if (typeStr.contains("bytes")) return new ByteArrayInputStream(o.toJava(byte[].class));
         String content = o.toString();
-        if (base64 && content.contains("base64,")) content = content.split("base64,")[1];
+        if (base64 && content.contains("base64,")) {
+            content = content.split("base64,")[1];
+        }
         return new ByteArrayInputStream(base64 ? decode(content) : content.getBytes());
     }
 
