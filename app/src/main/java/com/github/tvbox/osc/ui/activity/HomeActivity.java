@@ -715,6 +715,14 @@ public class HomeActivity extends BaseActivity {
         intent.putExtras(bundle);
         HomeActivity.this.startActivity(intent);
     }
+
+    private void refreshEmpty()
+    {
+        skipNextUpdate=true;
+        showSuccess();
+        sortAdapter.setNewData(DefaultConfig.adjustSort(ApiConfig.get().getHomeSourceBean().getKey(), new ArrayList<>(), true));
+        initViewPager(null);
+    }
     /**
      * 检查更新
      */
