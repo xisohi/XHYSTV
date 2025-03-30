@@ -29,5 +29,9 @@ public class SeriesAdapter extends BaseQuickAdapter<VodInfo.VodSeries, BaseViewH
             tvSeries.setTextColor(Color.WHITE);
         }
         helper.setText(R.id.tvSeries, item.name);
+
+        if (getData().size() == 1 && helper.getLayoutPosition() == 0) {
+            helper.itemView.setNextFocusUpId(R.id.mGridViewFlag);
+        }
     }
 }

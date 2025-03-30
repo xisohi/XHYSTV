@@ -157,6 +157,7 @@
         tools:visibility="visible">
 
         <LinearLayout
+            android:id="@+id/play_btn_group"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="@dimen/vs_10"
@@ -419,7 +420,7 @@
                 android:textSize="@dimen/ts_20" />
 
             <com.owen.tvrecyclerview.widget.TvRecyclerView
-                android:id="@+id/mGridView"
+                android:id="@+id/mGridParseView"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:clipChildren="false"

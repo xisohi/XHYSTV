@@ -5,7 +5,7 @@ android {
 
     defaultConfig {
         applicationId 'com.github.tvbox.osc'
-        targetSdkVersion 28
+        targetSdkVersion 26
         versionCode 250328
         versionName '25.03.28'
         multiDexEnabled true

@@ -90,7 +90,6 @@ public class VodController extends BaseController {
                             mPlayPauseTime.setVisibility(VISIBLE);
                         }
                         mPlayTitle.setVisibility(GONE);
-                        mNextBtn.requestFocus();
                         backBtn.setVisibility(ScreenUtils.isTv(context) ? INVISIBLE : VISIBLE);
                         showLockView();
                         break;
@@ -131,10 +130,11 @@ public class VodController extends BaseController {
     ImageView mProgressIcon;
     ImageView mLockView;
     LinearLayout mBottomRoot;
+    LinearLayout mPlayBtnGroup;
     LinearLayout mTopRoot1;
     LinearLayout mTopRoot2;
     LinearLayout mParseRoot;
-    TvRecyclerView mGridView;
+    TvRecyclerView mGridParseView;
     TextView mPlayTitle;
     TextView mPlayTitle1;
     TextView mPlayLoadNetSpeedRightTop;
@@ -211,9 +211,10 @@ public class VodController extends BaseController {
         mBottomRoot = findViewById(R.id.bottom_container);
         mTopRoot1 = findViewById(R.id.tv_top_l_container);
         mTopRoot2 = findViewById(R.id.tv_top_r_container);
+        mPlayBtnGroup = findViewById(R.id.play_btn_group);
         tv_screen_display = findViewById(R.id.tv_screen_display);
         mParseRoot = findViewById(R.id.parse_root);
-        mGridView = findViewById(R.id.mGridView);
+        mGridParseView = findViewById(R.id.mGridParseView);
         mPlayerRetry = findViewById(R.id.play_retry);
         mPlayrefresh = findViewById(R.id.play_refresh);
         mNextBtn = findViewById(R.id.play_next);
@@ -289,7 +290,7 @@ public class VodController extends BaseController {
             }
         });
 
-        mGridView.setLayoutManager(new V7LinearLayoutManager(getContext(), 0, false));
+        mGridParseView.setLayoutManager(new V7LinearLayoutManager(getContext(), 0, false));
         ParseAdapter parseAdapter = new ParseAdapter();
         parseAdapter.setOnItemClickListener(new BaseQuickAdapter.OnItemClickListener() {
             @Override
@@ -304,7 +305,7 @@ public class VodController extends BaseController {
                 hideBottom();
             }
         });
-        mGridView.setAdapter(parseAdapter);
+        mGridParseView.setAdapter(parseAdapter);
         parseAdapter.setNewData(ApiConfig.get().getParseBeanList());
 
         mSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -450,8 +451,6 @@ public class VodController extends BaseController {
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
-                mPlayerBtn.requestFocus();
-                mPlayerBtn.requestFocusFromTouch();
             }
         });
 
@@ -490,8 +489,6 @@ public class VodController extends BaseController {
                             } catch (Exception e) {
                                 e.printStackTrace();
                             }
-                            mPlayerBtn.requestFocus();
-                            mPlayerBtn.requestFocusFromTouch();
                         }
 
                         @Override
@@ -543,8 +540,6 @@ public class VodController extends BaseController {
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
-                mPlayerIJKBtn.requestFocus();
-                mPlayerIJKBtn.requestFocusFromTouch();
             }
         });
 //        增加播放页面片头片尾时间重置
@@ -670,9 +665,11 @@ public class VodController extends BaseController {
                 seekTime.setVisibility(disPlay);
                 if(disPlay==VISIBLE)mPlayPauseTime.setVisibility(disPlay);
                 Hawk.put(HawkConfig.SCREEN_DISPLAY, disPlay);
+                hideBottom();
             }
         });
-        mNextBtn.setNextFocusLeftId(R.id.play_time_start);
+        mNextBtn.setNextFocusLeftId(R.id.screen_display);
+        mScreenDisplay.setNextFocusRightId(R.id.play_next);
     }
 
     private void hideLiveAboutBtn() {
@@ -682,14 +679,12 @@ public class VodController extends BaseController {
             mPlayerTimeStartBtn.setVisibility(GONE);
             mPlayerTimeSkipBtn.setVisibility(GONE);
             mPlayerTimeResetBtn.setVisibility(GONE);
-            mNextBtn.setNextFocusLeftId(R.id.zimu_select);
         } else {
             mPlayerSpeedBtn.setVisibility(View.VISIBLE);
             mPlayerTimeStartEndText.setVisibility(View.VISIBLE);
             mPlayerTimeStartBtn.setVisibility(View.VISIBLE);
             mPlayerTimeSkipBtn.setVisibility(View.VISIBLE);
             mPlayerTimeResetBtn.setVisibility(View.VISIBLE);
-            mNextBtn.setNextFocusLeftId(R.id.play_time_start);
         }
     }
 
@@ -940,6 +935,13 @@ public class VodController extends BaseController {
     void showBottom() {
         mHandler.removeMessages(1003);
         mHandler.sendEmptyMessage(1002);
+        mNextBtn.requestFocus();
+    }
+
+    void showUpBottom() {
+        mHandler.removeMessages(1003);
+        mHandler.sendEmptyMessage(1002);
+        mPlayerTimeStartBtn.requestFocus();
     }
 
     void hideBottom() {
@@ -973,7 +975,6 @@ public class VodController extends BaseController {
                     togglePlay();
                     return true;
                 }
-//            } else if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {  return true;// 闲置开启计时关闭透明底栏
             } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode== KeyEvent.KEYCODE_MENU) {
                 if (!isBottomVisible()) {
                     showBottom();
@@ -1045,14 +1046,18 @@ public class VodController extends BaseController {
     private final Handler mmHandler = new Handler();
     private Runnable mLongPressRunnable;
     private static final long LONG_PRESS_DELAY = 800;
+    private boolean isLongPressTriggered = false;
+
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (isBottomVisible()) return super.onKeyDown(keyCode, event);
-        if ((keyCode == KeyEvent.KEYCODE_DPAD_UP) && event.getRepeatCount() == 0) {
+        if (keyCode == KeyEvent.KEYCODE_DPAD_UP && event.getRepeatCount() == 0) {
+            isLongPressTriggered = false;
             mLongPressRunnable = new Runnable() {
                 @Override
                 public void run() {
                     speedPlayStart();
+                    isLongPressTriggered = true;
                 }
             };
             mmHandler.postDelayed(mLongPressRunnable, LONG_PRESS_DELAY);
@@ -1064,11 +1069,22 @@ public class VodController extends BaseController {
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            // 移除长按回调
             if (mLongPressRunnable != null) {
                 mmHandler.removeCallbacks(mLongPressRunnable);
                 mLongPressRunnable = null;
             }
-            speedPlayEnd();
+            if (isLongPressTriggered) {
+                speedPlayEnd();
+            } else {
+                if (!isBottomVisible()) {
+                    showUpBottom();
+                    myHandle.postDelayed(myRunnable, myHandleSeconds);
+                }else {
+                    return super.onKeyUp(keyCode, event);
+                }
+            }
+            return true;
         }
         return super.onKeyUp(keyCode, event);
     }
