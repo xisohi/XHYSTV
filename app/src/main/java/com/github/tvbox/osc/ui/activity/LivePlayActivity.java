@@ -1,5 +1,6 @@
 package com.github.tvbox.osc.ui.activity;
 
+import android.Manifest;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.IntEvaluator;
@@ -1457,25 +1458,33 @@ public class LivePlayActivity extends BaseActivity {
 
             @Override
             public void playStateChanged(int playState) {
+                mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
                 switch (playState) {
                     case VideoView.STATE_IDLE:
+                        // 空闲状态：播放器处于空闲，尚未开始播放。一般不需要自动换源。
                     case VideoView.STATE_PAUSED:
+                        // 暂停状态：播放被暂停，通常是用户操作，不触发自动换源
                         break;
                     case VideoView.STATE_PREPARED:
+                        // 准备就绪：播放器已经加载好媒体数据，但尚未开始播放。
                     case VideoView.STATE_BUFFERED:
                     case VideoView.STATE_PLAYING:
+                        // 播放状态：当播放器缓冲完成或正在正常播放时，表明当前源是可用的，
                         currentLiveChangeSourceTimes = 0;
-                        mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
                         break;
                     case VideoView.STATE_ERROR:
                     case VideoView.STATE_PLAYBACK_COMPLETED:
-                        mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, 3000);
+                        // 错误或播放结束状态：播放器遇到错误或播放完毕时，
+                        // 启动自动换源任务，等待3秒后尝试切换至备选源
+                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, 3500);
                         break;
                     case VideoView.STATE_PREPARING:
                     case VideoView.STATE_BUFFERING:
-                        mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
-                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, (Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1) + 1) * 5000);
+                        // 正在准备或缓冲状态：表示当前源正在加载中
+                        mHandler.postDelayed(mConnectTimeoutChangeSourceRun, (Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1) + 1) * 5000L);
+                        break;
+                    default:
+                        LOG.i("echo-Unexpected live_play state: " + playState);
                         break;
                 }
             }
@@ -1798,6 +1807,10 @@ public class LivePlayActivity extends BaseActivity {
                 break;
             case 5://多源切换
                 //TODO
+                if (mVideoView != null) {
+                    mVideoView.release();
+                    mVideoView=null;
+                }
                 if(position==Hawk.get(HawkConfig.LIVE_GROUP_INDEX, 0))break;
                 JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
                 JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
@@ -1816,10 +1829,6 @@ public class LivePlayActivity extends BaseActivity {
                 liveSettingItemAdapter.selectItem(position, true, true);
                 Hawk.put(HawkConfig.LIVE_GROUP_INDEX, position);
                 ApiConfig.get().loadLiveApi(livesOBJ);
-                if (mVideoView != null) {
-                    mVideoView.release();
-                    mVideoView=null;
-                }
                 recreate();
                 return;
         }
@@ -1875,6 +1884,11 @@ public class LivePlayActivity extends BaseActivity {
         LOG.i("echo-live-url:"+url);
 
         if(url.contains(".py")){
+            if (!hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+                Toast.makeText(App.getInstance(), "该源需要存储权限", Toast.LENGTH_SHORT).show();
+                finish();
+                return;
+            }
             String finalUrl = url;
             Runnable waitResponse = new Runnable() {
                 @Override
@@ -1892,7 +1906,7 @@ public class LivePlayActivity extends BaseActivity {
                     });
                     String sortJson = null;
                     try {
-                        sortJson = future.get(6, TimeUnit.SECONDS);
+                        sortJson = future.get(10, TimeUnit.SECONDS);
                     } catch (TimeoutException e) {
                         e.printStackTrace();
                         future.cancel(true);
@@ -1928,8 +1942,13 @@ public class LivePlayActivity extends BaseActivity {
                         ApiConfig.get().loadLives(livesArray);
                         List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
                         if (list.isEmpty()) {
-                            Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
-                            finish();
+                            mHandler.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    Toast.makeText(App.getInstance(), "频道列表为空", Toast.LENGTH_SHORT).show();
+                                    finish();
+                                }
+                            });
                             return;
                         }
                         liveChannelGroupList.clear();
@@ -2003,6 +2022,39 @@ public class LivePlayActivity extends BaseActivity {
             });
 
         }
+    }
+
+    private void autoSwitchNextLive(){
+        Toast.makeText(App.getInstance(), "加载错误,自动切换下一个源", Toast.LENGTH_SHORT).show();
+        JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
+        int position=Hawk.get(HawkConfig.LIVE_GROUP_INDEX,0)+1;
+        if(position>live_groups.size()-1){
+            Hawk.put(HawkConfig.LIVE_GROUP_INDEX,0);
+            Toast.makeText(App.getInstance(), "当前无有效直播,自动退出到主页", Toast.LENGTH_SHORT).show();
+            jumpActivity(HomeActivity.class);
+        }
+
+        JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
+        if(livesOBJ.has("type")){
+            String type= livesOBJ.get("type").getAsString();
+            if(!type.equals("0") && !type.equals("3")){
+                Toast.makeText(App.getInstance(), "暂不支持该直播类型", Toast.LENGTH_SHORT).show();
+                autoSwitchNextLive();
+            }
+        }else {
+            if(!livesOBJ.has("channels")){
+                Toast.makeText(App.getInstance(), "暂不支持该直播类型", Toast.LENGTH_SHORT).show();
+                autoSwitchNextLive();
+            }
+        }
+        liveSettingItemAdapter.selectItem(position, true, true);
+        Hawk.put(HawkConfig.LIVE_GROUP_INDEX, position);
+        ApiConfig.get().loadLiveApi(livesOBJ);
+        if (mVideoView != null) {
+            mVideoView.release();
+            mVideoView=null;
+        }
+        recreate();
     }
 
     private void initLiveState() {
