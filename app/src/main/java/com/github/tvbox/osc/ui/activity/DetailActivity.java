@@ -175,7 +175,7 @@ public class DetailActivity extends BaseActivity {
         this.mGridViewLayoutMgr = new V7GridLayoutManager(this.mContext, 6);
         mGridView.setLayoutManager(this.mGridViewLayoutMgr);
 //        mGridView.setLayoutManager(new V7LinearLayoutManager(this.mContext, 0, false));
-        seriesAdapter = new SeriesAdapter();
+        seriesAdapter = new SeriesAdapter(this.mGridViewLayoutMgr);
         mGridView.setAdapter(seriesAdapter);
         mGridViewFlag = findViewById(R.id.mGridViewFlag);
         mGridViewFlag.setHasFixedSize(true);
@@ -202,6 +202,9 @@ public class DetailActivity extends BaseActivity {
             protected void convert(BaseViewHolder helper, String item) {
                 TextView tvSeries = helper.getView(R.id.tvSeriesGroup);
                 tvSeries.setText(item);
+                if (helper.getLayoutPosition() == getData().size() - 1) {
+                    helper.itemView.setNextFocusRightId(R.id.tvPlay);
+                }
             }
         };
         mSeriesGroupView.setAdapter(seriesGroupAdapter);
@@ -354,16 +357,16 @@ public class DetailActivity extends BaseActivity {
             public void onItemClick(TvRecyclerView parent, View itemView, int position) {
             }
         });
-        mGridView.setOnFocusChangeListener(new View.OnFocusChangeListener() {
-            @Override
-            public void onFocusChange(View v, boolean hasFocus) {
-                if (hasFocus && vodInfo.playIndex != -1) {
-                    // 当获得焦点且有目标位置时，执行滚动和聚焦
-                    LOG.i("echo-onFocusChange");
-                    mGridView.setSelection(vodInfo.playIndex);
-                }
-            }
-        });
+//        mGridView.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+//            @Override
+//            public void onFocusChange(View v, boolean hasFocus) {
+//                if (hasFocus && vodInfo.playIndex != -1) {
+//                    // 当获得焦点且有目标位置时，执行滚动和聚焦
+//                    LOG.i("echo-onFocusChange");
+//                    mGridView.setSelection(vodInfo.playIndex);
+//                }
+//            }
+//        });
         mGridViewFlag.setOnItemListener(new TvRecyclerView.OnItemListener() {
             private void refresh(View itemView, int position) {
                 String newFlag = seriesFlagAdapter.getData().get(position).name;
@@ -457,7 +460,7 @@ public class DetailActivity extends BaseActivity {
                 TextView txtView = itemView.findViewById(R.id.tvSeriesGroup);
                 txtView.setTextColor(mContext.getResources().getColor(R.color.color_02F8E1));
                 if (vodInfo != null && vodInfo.seriesMap.get(vodInfo.playFlag).size() > 0) {
-                    int targetPos = position * GroupCount+1;
+                    int targetPos = position * GroupCount;
                     mGridView.smoothScrollToPosition(targetPos);
                 }
                 currentSeriesGroupView = itemView;
