@@ -403,6 +403,7 @@ public class ApiConfig {
                         if (ex != null) {
                             LOG.i("echo---jar Request failed: " + ex.getMessage());
                         }
+                        if(cache.exists())jarLoader.load(cache.getAbsolutePath());
                         callback.error("网络错误");
                     }
                 });
@@ -446,15 +447,12 @@ public class ApiConfig {
                 sb.setFilterable(DefaultConfig.safeJsonInt(obj, "filterable", 1));
             }
             sb.setPlayerUrl(DefaultConfig.safeJsonString(obj, "playUrl", ""));
-            if(obj.has("ext") && (obj.get("ext").isJsonObject() || obj.get("ext").isJsonArray())){
-                sb.setExt(obj.get("ext").toString());
-            }else {
-                sb.setExt(DefaultConfig.safeJsonString(obj, "ext", ""));
-            }
+            sb.setExt(DefaultConfig.safeJsonString(obj, "ext", ""));
             sb.setJar(DefaultConfig.safeJsonString(obj, "jar", ""));
             sb.setPlayerType(DefaultConfig.safeJsonInt(obj, "playerType", -1));
             sb.setCategories(DefaultConfig.safeJsonStringList(obj, "categories"));
             sb.setClickSelector(DefaultConfig.safeJsonString(obj, "click", ""));
+            sb.setStyle(DefaultConfig.safeJsonString(obj, "style", ""));
             if (firstSite == null && sb.getFilterable()==1)
                 firstSite = sb;
             sourceBeanList.put(siteKey, sb);
@@ -529,15 +527,16 @@ public class ApiConfig {
                 JsonObject livesOBJ = lives_groups.get(live_group_index).getAsJsonObject();
                 loadLiveApi(livesOBJ);
             }
-            myHosts = new HashMap<>();
-            if (infoJson.has("hosts")) {
-                JsonArray hostsArray = infoJson.getAsJsonArray("hosts");
-                for (int i = 0; i < hostsArray.size(); i++) {
-                    String entry = hostsArray.get(i).getAsString();
-                    String[] parts = entry.split("=", 2); // 只分割一次，防止 value 里有 =
-                    if (parts.length == 2) {
-                        myHosts.put(parts[0], parts[1]);
-                    }
+        }
+
+        myHosts = new HashMap<>();
+        if (infoJson.has("hosts")) {
+            JsonArray hostsArray = infoJson.getAsJsonArray("hosts");
+            for (int i = 0; i < hostsArray.size(); i++) {
+                String entry = hostsArray.get(i).getAsString();
+                String[] parts = entry.split("=", 2); // 只分割一次，防止 value 里有 =
+                if (parts.length == 2) {
+                    myHosts.put(parts[0], parts[1]);
                 }
             }
         }
