@@ -27,12 +27,14 @@ android {
             dimension "mode"
             minSdkVersion 16
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            buildConfigField "String", "FLAVOR", "\"normal\""
         }
         python {
             dimension "mode"
             // 配置Python打包特有的设置（如有需要）
             minSdkVersion 19
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-python.pro'
+            buildConfigField "String", "FLAVOR", "\"python\""
         }
     }
 
