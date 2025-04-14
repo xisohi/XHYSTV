@@ -58,7 +58,7 @@ android {
         variant.outputs.configureEach { output ->
             def flavorNames = variant.productFlavors.collect { it.name == "normal" ? "java" : it.name }.join('-')
             // 构建自定义文件名
-            def fileName = "TVBox_${variant.buildType.name}-${flavorNames}.apk"
+            def fileName = "XHYSTV-${flavorNames}.apk"
             outputFileName = fileName
         }
     }
