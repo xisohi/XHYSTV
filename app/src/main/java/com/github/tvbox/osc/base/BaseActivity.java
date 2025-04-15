@@ -1,5 +1,6 @@
 package com.github.tvbox.osc.base;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.content.res.AssetManager;
@@ -11,23 +12,32 @@ import android.os.Bundle;
 import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.View;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.PermissionChecker;
 
+import com.github.tvbox.osc.BuildConfig;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.callback.EmptyCallback;
 import com.github.tvbox.osc.callback.LoadingCallback;
+import com.github.tvbox.osc.ui.xupdate.Constants;
+import com.github.tvbox.osc.ui.xupdate.CustomUpdatePrompter;
 import com.github.tvbox.osc.util.AppManager;
+import com.hjq.permissions.OnPermissionCallback;
+import com.hjq.permissions.Permission;
+import com.hjq.permissions.XXPermissions;
 import com.kingja.loadsir.callback.Callback;
 import com.kingja.loadsir.core.LoadService;
 import com.kingja.loadsir.core.LoadSir;
+import com.xuexiang.xupdate.XUpdate;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.List;
 
 import me.jessyan.autosize.AutoSizeCompat;
 import me.jessyan.autosize.internal.CustomAdapt;
@@ -62,6 +72,10 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         mContext = this;
         CutoutUtil.adaptCutoutAboveAndroidP(mContext, true);//设置刘海
         AppManager.getInstance().addActivity(this);
+
+        // 在应用启动时检查更新
+        checkPermissions();
+
         init();
     }
 
@@ -225,5 +239,57 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
             getWindow().setBackgroundDrawable(globalWp);
         else
             getWindow().setBackgroundDrawableResource(R.drawable.app_bg);
+    }
+
+    /**
+     * 检查更新
+     */
+    public void update() {
+        String updateUrl;
+        if (BuildConfig.FLAVOR.equals("normal")) {
+            updateUrl = Constants.UPDATE_NORMAL_URL;
+        } else if (BuildConfig.FLAVOR.equals("python")) {
+            updateUrl = Constants.UPDATE_PYTHON_URL;
+        } else {
+            // 默认情况
+            updateUrl = Constants.UPDATE_NORMAL_URL;
+        }
+
+        XUpdate.newBuild(this)
+                .updateUrl(updateUrl)
+                .updatePrompter(new CustomUpdatePrompter())
+                .isAutoMode(false) // 禁用自动更新模式
+                .supportBackgroundUpdate(true) // 后台下载
+                .build();
+    }
+
+    /**
+     * 检查权限 后 检查更新
+     */
+    public void checkPermissions() {
+        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
+            update();
+        } else {
+            XXPermissions.with(this)
+                    .permission(Permission.Group.STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(List<String> permissions, boolean all) {
+                            if (all) {
+                                update();
+                            }
+                        }
+
+                        @Override
+                        public void onDenied(List<String> permissions, boolean never) {
+                            if (never) {
+                                Toast.makeText(mContext, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
+                                XXPermissions.startPermissionActivity((Activity) mContext, permissions);
+                            } else {
+                                Toast.makeText(mContext, "获取存储权限失败", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+        }
     }
 }

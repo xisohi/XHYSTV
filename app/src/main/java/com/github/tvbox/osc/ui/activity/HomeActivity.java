@@ -20,7 +20,7 @@ import android.view.animation.BounceInterpolator;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
-import android.app.Activity;
+
 import androidx.annotation.NonNull;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.lifecycle.Observer;
@@ -28,7 +28,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
-import com.github.tvbox.osc.BuildConfig;
+
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.base.BaseActivity;
@@ -76,12 +76,7 @@ import java.util.List;
 import java.util.Objects;
 
 import me.jessyan.autosize.utils.AutoSizeUtils;
-import com.github.tvbox.osc.ui.xupdate.Constants;
-import com.github.tvbox.osc.ui.xupdate.CustomUpdatePrompter;
-import com.hjq.permissions.OnPermissionCallback;
-import com.hjq.permissions.Permission;
-import com.hjq.permissions.XXPermissions;
-import com.xuexiang.xupdate.XUpdate;
+
 public class HomeActivity extends BaseActivity {
     private LinearLayout topLayout;
     private LinearLayout contentLayout;
@@ -133,8 +128,6 @@ public class HomeActivity extends BaseActivity {
             useCacheConfig = bundle.getBoolean("useCache", false);
         }
         initData();
-        // 检查权限 后 检查更新
-        checkPermissions();
     }
 
     private void initView() {
@@ -276,6 +269,7 @@ public class HomeActivity extends BaseActivity {
         setLoadSir(this.contentLayout);
         //mHandler.postDelayed(mFindFocus, 500);
     }
+
 
     private boolean skipNextUpdate = false;
 
@@ -743,56 +737,5 @@ public class HomeActivity extends BaseActivity {
         blinkAnimation.setRepeatMode(Animation.REVERSE);
         blinkAnimation.setRepeatCount(Animation.INFINITE);
         tvName.startAnimation(blinkAnimation);
-    }
-    /**
-     * 检查更新
-     */
-    public void update() {
-        String updateUrl;
-        if (BuildConfig.FLAVOR.equals("normal")) {
-            updateUrl = Constants.UPDATE_NORMAL_URL;
-        } else if (BuildConfig.FLAVOR.equals("python")) {
-            updateUrl = Constants.UPDATE_PYTHON_URL;
-        } else {
-            // 默认情况
-            updateUrl = Constants.UPDATE_NORMAL_URL;
-        }
-
-        XUpdate.newBuild(this)
-                .updateUrl(updateUrl)
-                .updatePrompter(new CustomUpdatePrompter())
-                .isAutoMode(false) // 禁用自动更新模式
-                .supportBackgroundUpdate(true) // 后台下载
-                .build();
-    }
-
-    /**
-     * 检查权限 后 检查更新
-     */
-    public void checkPermissions() {
-        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
-            update();
-        } else {
-            XXPermissions.with(this)
-                    .permission(Permission.Group.STORAGE)
-                    .request(new OnPermissionCallback() {
-                        @Override
-                        public void onGranted(List<String> permissions, boolean all) {
-                            if (all) {
-                                update();
-                            }
-                        }
-
-                        @Override
-                        public void onDenied(List<String> permissions, boolean never) {
-                            if (never) {
-                                Toast.makeText(mContext, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
-                                XXPermissions.startPermissionActivity((Activity) mContext, permissions);
-                            } else {
-                                Toast.makeText(mContext, "获取存储权限失败", Toast.LENGTH_SHORT).show();
-                            }
-                        }
-                    });
-        }
     }
 }
