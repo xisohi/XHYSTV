@@ -142,7 +142,7 @@ public class App extends MultiDexApplication {
                 .debug(true)
                 .isWifiOnly(false) //默认设置只在wifi下检查版本更新
                 .isGet(true)  //默认设置使用get请求检查版本
-                .isAutoMode(false) //默认设置非自动模式，可根据具体使用配置
+                .isAutoMode(true) //默认设置非自动模式，可根据具体使用配置
                 .setApkCacheDir(getDiskCachePath(instance))
                 .param("VersionCode", UpdateUtils.getVersionCode(this))
                 .param("VersionName", getPackageName())
