@@ -38,7 +38,10 @@ public class SeriesFlagAdapter extends BaseQuickAdapter<VodInfo.VodSeriesFlag, B
             helper.itemView.setNextFocusDownId(R.id.mGridView);
         }
         if (helper.getLayoutPosition() == getData().size() - 1) {
-            helper.itemView.setNextFocusRightId(R.id.tvPlay);
+            helper.itemView.setId(View.generateViewId());
+            helper.itemView.setNextFocusRightId(helper.itemView.getId());
+        }else {
+            helper.itemView.setNextFocusRightId(View.NO_ID);
         }
     }
 }

@@ -219,6 +219,9 @@ public class DetailActivity extends BaseActivity {
                 TextView tvSeries = helper.getView(R.id.tvSeriesGroup);
                 tvSeries.setText(item);
                 if (helper.getLayoutPosition() == getData().size() - 1) {
+                    helper.itemView.setId(View.generateViewId());
+                    helper.itemView.setNextFocusRightId(helper.itemView.getId());
+                }else {
                     helper.itemView.setNextFocusRightId(View.NO_ID);
                 }
             }
