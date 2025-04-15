@@ -10,6 +10,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
 
+import com.github.tvbox.osc.BuildConfig;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.base.BaseActivity;
@@ -735,8 +736,18 @@ public class ModelSettingFragment extends BaseLazyFragment {
             @Override
             public void onClick(View v) {
                 FastClickCheckUtil.check(v);
+                String updateUrl;
+                if (BuildConfig.FLAVOR.equals("normal")) {
+                    updateUrl = Constants.UPDATE_NORMAL_URL;
+                } else if (BuildConfig.FLAVOR.equals("python")) {
+                    updateUrl = Constants.UPDATE_PYTHON_URL;
+                } else {
+                    // 默认情况
+                    updateUrl = Constants.UPDATE_NORMAL_URL;
+                }
+
                 XUpdate.newBuild(getContext()) // 使用 getContext() 获取上下文
-                        .updateUrl(Constants.UPDATE_DEFAULT_URL)
+                        .updateUrl(updateUrl)
                         .updatePrompter(new CustomUpdatePrompter()) // 自定义提示界面
                         .update();
             }
