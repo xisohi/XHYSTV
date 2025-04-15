@@ -28,7 +28,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 import androidx.viewpager.widget.ViewPager;
-
+import com.github.tvbox.osc.BuildConfig;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.base.BaseActivity;
@@ -748,12 +748,22 @@ public class HomeActivity extends BaseActivity {
      * 检查更新
      */
     public void update() {
+        String updateUrl;
+        if (BuildConfig.FLAVOR.equals("normal")) {
+            updateUrl = Constants.UPDATE_NORMAL_URL;
+        } else if (BuildConfig.FLAVOR.equals("python")) {
+            updateUrl = Constants.UPDATE_PYTHON_URL;
+        } else {
+            // 默认情况
+            updateUrl = Constants.UPDATE_NORMAL_URL;
+        }
+
         XUpdate.newBuild(this)
-                .updateUrl(Constants.UPDATE_DEFAULT_URL)
-                //.isAutoMode(true) // 自动下载，不会弹出窗口，下载完后会进入系统安装界面，类似强制安装，未完成安装打开应用可能会重复进入安装界面
-                //.supportBackgroundUpdate(true)// 后台下载按钮
-                .updatePrompter(new CustomUpdatePrompter())// 自定义提示界面
-                .update();
+                .updateUrl(updateUrl)
+                .updatePrompter(new CustomUpdatePrompter())
+                .isAutoMode(false) // 禁用自动更新模式
+                .supportBackgroundUpdate(true) // 后台下载
+                .build();
     }
 
     /**
@@ -761,8 +771,6 @@ public class HomeActivity extends BaseActivity {
      */
     public void checkPermissions() {
         if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
-            //Toast.makeText(this, "已获得存储权限", Toast.LENGTH_SHORT).show();
-            // 更新
             update();
         } else {
             XXPermissions.with(this)
@@ -771,8 +779,6 @@ public class HomeActivity extends BaseActivity {
                         @Override
                         public void onGranted(List<String> permissions, boolean all) {
                             if (all) {
-                                //Toast.makeText(mContext, "已获得存储权限", Toast.LENGTH_SHORT).show();
-                                // 更新
                                 update();
                             }
                         }
