@@ -1,7 +1,5 @@
 package com.github.tvbox.osc.base;
 
-import static com.xuexiang.xupdate.XUpdate.*;
-
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -9,15 +7,12 @@ import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.widget.Toast;
-import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -37,8 +32,6 @@ import com.kingja.loadsir.callback.Callback;
 import com.kingja.loadsir.core.LoadService;
 import com.kingja.loadsir.core.LoadSir;
 import com.xuexiang.xupdate.XUpdate;
-import com.xuexiang.xupdate.entity.UpdateError;
-import com.xuexiang.xupdate.listener.OnUpdateFailureListener;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -77,20 +70,10 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         super.onCreate(savedInstanceState);
         setContentView(getLayoutResID());
         mContext = this;
-        // 设置全局更新失败监听
-        XUpdate.get().setOnUpdateFailureListener(new OnUpdateFailureListener() {
-            @Override
-            public void onFailure(UpdateError error) {
-                Log.e("BaseActivity", "更新失败: " + error);
-            }
-        });
         CutoutUtil.adaptCutoutAboveAndroidP(mContext, true);//设置刘海
         AppManager.getInstance().addActivity(this);
-        // 打印日志：应用启动
-        Log.d("BaseActivity", "应用启动，开始检查更新");
         // 在应用启动时检查更新
         checkPermissions();
-
         init();
     }
 
@@ -255,58 +238,10 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         else
             getWindow().setBackgroundDrawableResource(R.drawable.app_bg);
     }
-
-    /**
-     * 检查权限后检查更新
-     */
-    public void checkPermissions() {
-        // 打印日志：检查存储权限
-        Log.d("BaseActivity", "检查存储权限");
-        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
-            // 权限已授予，直接检查更新
-            Log.d("BaseActivity", "存储权限已授予，开始检查更新");
-            update();
-        } else {
-            // 权限未授予，请求权限
-            Log.d("BaseActivity", "存储权限未授予，请求权限");
-            XXPermissions.with(this)
-                    .permission(Permission.Group.STORAGE)
-                    .request(new OnPermissionCallback() {
-                        @Override
-                        public void onGranted(List<String> permissions, boolean all) {
-                            if (all) {
-                                // 所有权限都已授予，检查更新
-                                Log.d("BaseActivity", "所有权限都已授予，开始检查更新");
-                                update();
-                            }
-                        }
-
-                        @Override
-                        public void onDenied(List<String> permissions, boolean never) {
-                            if (never) {
-                                // 用户永久拒绝了权限，提示用户手动开启
-                                Log.d("BaseActivity", "用户永久拒绝了权限，提示用户手动开启");
-                                Toast.makeText(BaseActivity.this, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
-                                XXPermissions.startPermissionActivity(BaseActivity.this, permissions);
-                            } else {
-                                // 用户拒绝了权限，但未选择“不再提示”
-                                Log.d("BaseActivity", "用户拒绝了权限，但未选择“不再提示”");
-                                Toast.makeText(BaseActivity.this, "获取存储权限失败", Toast.LENGTH_SHORT).show();
-                            }
-                        }
-                    });
-        }
-    }
-
     /**
      * 检查更新
      */
     public void update() {
-        if (!isNetworkAvailable()) {
-            Toast.makeText(this, "网络不可用", Toast.LENGTH_SHORT).show();
-            return;
-        }
-
         String updateUrl;
         if (BuildConfig.FLAVOR.equals("normal")) {
             updateUrl = Constants.UPDATE_NORMAL_URL;
@@ -316,21 +251,42 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
             // 默认情况
             updateUrl = Constants.UPDATE_NORMAL_URL;
         }
-        // 打印日志：开始更新检查
-        Log.d("BaseActivity", "开始更新检查，更新地址: " + updateUrl);
 
         XUpdate.newBuild(this)
                 .updateUrl(updateUrl)
                 .updatePrompter(new CustomUpdatePrompter())
-                //.isAutoMode(true) // 禁用自动更新模式
-                //.supportBackgroundUpdate(true) // 后台下载
-                .update(); // 关键！启动更新检查
+                .isAutoMode(false) // 禁用自动更新模式
+                .supportBackgroundUpdate(true) // 后台下载
+                .update();
     }
 
-    private boolean isNetworkAvailable() {
-        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
-        NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
-        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
-    }
+    /**
+     * 检查权限 后 检查更新
+     */
+    public void checkPermissions() {
+        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
+            update();
+        } else {
+            XXPermissions.with(this)
+                    .permission(Permission.Group.STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(List<String> permissions, boolean all) {
+                            if (all) {
+                                update();
+                            }
+                        }
 
+                        @Override
+                        public void onDenied(List<String> permissions, boolean never) {
+                            if (never) {
+                                Toast.makeText(mContext, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
+                                XXPermissions.startPermissionActivity((Activity) mContext, permissions);
+                            } else {
+                                Toast.makeText(mContext, "获取存储权限失败", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+        }
+    }
 }
