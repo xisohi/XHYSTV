@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.util.DisplayMetrics;
 import android.view.View;
 import android.widget.Toast;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AppCompatActivity;
@@ -72,7 +73,8 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         mContext = this;
         CutoutUtil.adaptCutoutAboveAndroidP(mContext, true);//设置刘海
         AppManager.getInstance().addActivity(this);
-
+        // 打印日志：应用启动
+        Log.d("BaseActivity", "应用启动，开始检查更新");
         // 在应用启动时检查更新
         checkPermissions();
 
@@ -245,15 +247,23 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
      * 检查权限后检查更新
      */
     public void checkPermissions() {
+        // 打印日志：检查存储权限
+        Log.d("BaseActivity", "检查存储权限");
         if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
+            // 权限已授予，直接检查更新
+            Log.d("BaseActivity", "存储权限已授予，开始检查更新");
             update();
         } else {
+            // 权限未授予，请求权限
+            Log.d("BaseActivity", "存储权限未授予，请求权限");
             XXPermissions.with(this)
                     .permission(Permission.Group.STORAGE)
                     .request(new OnPermissionCallback() {
                         @Override
                         public void onGranted(List<String> permissions, boolean all) {
                             if (all) {
+                                // 所有权限都已授予，检查更新
+                                Log.d("BaseActivity", "所有权限都已授予，开始检查更新");
                                 update();
                             }
                         }
@@ -261,9 +271,13 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
                         @Override
                         public void onDenied(List<String> permissions, boolean never) {
                             if (never) {
+                                // 用户永久拒绝了权限，提示用户手动开启
+                                Log.d("BaseActivity", "用户永久拒绝了权限，提示用户手动开启");
                                 Toast.makeText(BaseActivity.this, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
                                 XXPermissions.startPermissionActivity(BaseActivity.this, permissions);
                             } else {
+                                // 用户拒绝了权限，但未选择“不再提示”
+                                Log.d("BaseActivity", "用户拒绝了权限，但未选择“不再提示”");
                                 Toast.makeText(BaseActivity.this, "获取存储权限失败", Toast.LENGTH_SHORT).show();
                             }
                         }
@@ -284,7 +298,8 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
             // 默认情况
             updateUrl = Constants.UPDATE_NORMAL_URL;
         }
-
+        // 打印日志：开始更新检查
+        Log.d("BaseActivity", "开始更新检查，更新地址: " + updateUrl);
         XUpdate.newBuild(this)
                 .updateUrl(updateUrl)
                 .updatePrompter(new CustomUpdatePrompter())
