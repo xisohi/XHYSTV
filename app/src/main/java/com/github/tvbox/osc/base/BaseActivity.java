@@ -1,5 +1,7 @@
 package com.github.tvbox.osc.base;
 
+import static com.xuexiang.xupdate.XUpdate.*;
+
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
@@ -7,6 +9,8 @@ import android.content.res.AssetManager;
 import android.content.res.Resources;
 import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Looper;
@@ -33,6 +37,8 @@ import com.kingja.loadsir.callback.Callback;
 import com.kingja.loadsir.core.LoadService;
 import com.kingja.loadsir.core.LoadSir;
 import com.xuexiang.xupdate.XUpdate;
+import com.xuexiang.xupdate.entity.UpdateError;
+import com.xuexiang.xupdate.listener.OnUpdateFailureListener;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -71,6 +77,13 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         super.onCreate(savedInstanceState);
         setContentView(getLayoutResID());
         mContext = this;
+        // 设置全局更新失败监听
+        XUpdate.get().setOnUpdateFailureListener(new OnUpdateFailureListener() {
+            @Override
+            public void onFailure(UpdateError error) {
+                Log.e("BaseActivity", "更新失败: " + error);
+            }
+        });
         CutoutUtil.adaptCutoutAboveAndroidP(mContext, true);//设置刘海
         AppManager.getInstance().addActivity(this);
         // 打印日志：应用启动
@@ -289,6 +302,11 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
      * 检查更新
      */
     public void update() {
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, "网络不可用", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
         String updateUrl;
         if (BuildConfig.FLAVOR.equals("normal")) {
             updateUrl = Constants.UPDATE_NORMAL_URL;
@@ -300,11 +318,19 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         }
         // 打印日志：开始更新检查
         Log.d("BaseActivity", "开始更新检查，更新地址: " + updateUrl);
+
         XUpdate.newBuild(this)
                 .updateUrl(updateUrl)
                 .updatePrompter(new CustomUpdatePrompter())
                 //.isAutoMode(true) // 禁用自动更新模式
                 //.supportBackgroundUpdate(true) // 后台下载
-                .build();
+                .update(); // 关键！启动更新检查
     }
+
+    private boolean isNetworkAvailable() {
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        NetworkInfo activeNetworkInfo = connectivityManager.getActiveNetworkInfo();
+        return activeNetworkInfo != null && activeNetworkInfo.isConnected();
+    }
+
 }
