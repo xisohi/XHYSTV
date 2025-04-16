@@ -78,6 +78,15 @@ import java.util.Objects;
 import me.jessyan.autosize.utils.AutoSizeUtils;
 
 public class HomeActivity extends BaseActivity {
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        if (savedInstanceState == null) {
+            // 仅在初次创建时检查更新
+            checkPermissions();
+        }
+    }
+
     private LinearLayout topLayout;
     private LinearLayout contentLayout;
     private TextView tvDate;

@@ -53,6 +53,8 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
     private LoadService mLoadService;
 
     private static float screenRatio = -100.0f;
+    // ▼ 添加静态标志位，控制更新检查仅执行一次
+    private static boolean hasCheckedUpdate = false;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -73,7 +75,7 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         CutoutUtil.adaptCutoutAboveAndroidP(mContext, true);//设置刘海
         AppManager.getInstance().addActivity(this);
         // 在应用启动时检查更新
-        checkPermissions();
+        //checkPermissions();
         init();
     }
 
@@ -242,6 +244,9 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
      * 检查更新
      */
     public void update() {
+        if (hasCheckedUpdate) {
+            return; // 已检查过更新，直接退出
+        }
         String updateUrl;
         if (BuildConfig.FLAVOR.equals("normal")) {
             updateUrl = Constants.UPDATE_NORMAL_URL;
@@ -258,12 +263,18 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
                 .isAutoMode(false) // 禁用自动更新模式
                 .supportBackgroundUpdate(true) // 后台下载
                 .update();
+
+        // ▼ 标记为已检查（无论成功或失败）
+        hasCheckedUpdate = true;
     }
 
     /**
      * 检查权限 后 检查更新
      */
     public void checkPermissions() {
+        if (hasCheckedUpdate) {
+            return; // 已检查过更新，直接退出
+        }
         if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
             update();
         } else {
