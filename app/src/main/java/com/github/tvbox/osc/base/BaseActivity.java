@@ -242,6 +242,36 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
     }
 
     /**
+     * 检查权限后检查更新
+     */
+    public void checkPermissions() {
+        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
+            update();
+        } else {
+            XXPermissions.with(this)
+                    .permission(Permission.Group.STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(List<String> permissions, boolean all) {
+                            if (all) {
+                                update();
+                            }
+                        }
+
+                        @Override
+                        public void onDenied(List<String> permissions, boolean never) {
+                            if (never) {
+                                Toast.makeText(BaseActivity.this, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
+                                XXPermissions.startPermissionActivity(BaseActivity.this, permissions);
+                            } else {
+                                Toast.makeText(BaseActivity.this, "获取存储权限失败", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+        }
+    }
+
+    /**
      * 检查更新
      */
     public void update() {
@@ -261,35 +291,5 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
                 .isAutoMode(true) // 禁用自动更新模式
                 .supportBackgroundUpdate(true) // 后台下载
                 .build();
-    }
-
-    /**
-     * 检查权限 后 检查更新
-     */
-    public void checkPermissions() {
-        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
-            update();
-        } else {
-            XXPermissions.with(this)
-                    .permission(Permission.Group.STORAGE)
-                    .request(new OnPermissionCallback() {
-                        @Override
-                        public void onGranted(List<String> permissions, boolean all) {
-                            if (all) {
-                                update();
-                            }
-                        }
-
-                        @Override
-                        public void onDenied(List<String> permissions, boolean never) {
-                            if (never) {
-                                Toast.makeText(mContext, "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
-                                XXPermissions.startPermissionActivity((Activity) mContext, permissions);
-                            } else {
-                                Toast.makeText(mContext, "获取存储权限失败", Toast.LENGTH_SHORT).show();
-                            }
-                        }
-                    });
-        }
     }
 }
