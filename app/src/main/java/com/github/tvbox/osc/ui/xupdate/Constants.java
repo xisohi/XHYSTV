@@ -23,8 +23,7 @@ package com.github.tvbox.osc.ui.xupdate;
  */
 public final class Constants {
 
-    public static final String UPDATE_DEFAULT_URL = "https://xhys.lcjly.cn/update/XHYSTV.json";
-    public static final String UPDATE_NORMAL_URL = "https://xhys.lcjly.cn/update/XHYSTV.json";
+    public static final String UPDATE_NORMAL_URL = "https://xhys.lcjly.cn/update/XHYSTV-java.json";
     public static final String UPDATE_PYTHON_URL = "https://xhys.lcjly.cn/update/XHYSTV-python.json";
     // 更新服务域名
     public static final String UPDATE_URL = "http://xxx.xxx";
