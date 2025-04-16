@@ -303,8 +303,8 @@ public abstract class BaseActivity extends AppCompatActivity implements CustomAd
         XUpdate.newBuild(this)
                 .updateUrl(updateUrl)
                 .updatePrompter(new CustomUpdatePrompter())
-                .isAutoMode(true) // 禁用自动更新模式
-                .supportBackgroundUpdate(true) // 后台下载
+                //.isAutoMode(true) // 禁用自动更新模式
+                //.supportBackgroundUpdate(true) // 后台下载
                 .build();
     }
 }
