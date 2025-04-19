@@ -919,22 +919,18 @@ public class ApiConfig {
         return pyLoader.getSpider(MD5.string2MD5(url), url, "");
     }
 
-    public Object[] proxyLocal(Map<String,String> param){
-        SourceBean sourceBean = ApiConfig.get().getHomeSourceBean();
-
-        if(Hawk.get(HawkConfig.PLAYER_IS_LIVE,false)){
-            if(currentLiveSpider.contains(".py")){
-                return pyLoader.proxyInvoke(param);
-            }else {
-                return jarLoader.proxyInvoke(param);
-            }
-        }else {
-            if (sourceBean.getApi().contains(".py")) {
-                return pyLoader.proxyInvoke(param);
-            }else {
-                return jarLoader.proxyInvoke(param);
-            }
+    public Object[] proxyLocal(Map<String, String> param) {
+        if ("js".equals(param.get("do"))) {
+            return jsLoader.proxyInvoke(param);
         }
+        String apiString;
+        if (Hawk.get(HawkConfig.PLAYER_IS_LIVE, false)) {
+            apiString = currentLiveSpider;
+        } else {
+            SourceBean sourceBean = ApiConfig.get().getHomeSourceBean();
+            apiString = sourceBean.getApi();
+        }
+        return apiString.contains(".py") ? pyLoader.proxyInvoke(param) : jarLoader.proxyInvoke(param);
     }
 
     public JSONObject jsonExt(String key, LinkedHashMap<String, String> jxs, String url) {
@@ -1090,5 +1086,6 @@ public class ApiConfig {
     public void clearLoader(){
         jarLoader.clear();
         pyLoader.clear();
+        jsLoader.clear();
     }
 }
