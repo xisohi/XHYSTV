@@ -4,6 +4,7 @@ android {
     compileSdkVersion 33
 
     defaultConfig {
+        // 修改包名，使小米系统可以安装
         applicationId 'com.github.tvbox.osc.xhystv'
         targetSdkVersion 28
         versionCode 250420
