@@ -4,11 +4,13 @@ import android.app.Activity;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Message;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.webkit.WebView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.SeekBar;
@@ -23,6 +25,7 @@ import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.bean.IJKCode;
 import com.github.tvbox.osc.bean.ParseBean;
+import com.github.tvbox.osc.bean.SourceBean;
 import com.github.tvbox.osc.server.ControlManager;
 import com.github.tvbox.osc.server.RemoteServer;
 import com.github.tvbox.osc.subtitle.widget.SimpleSubtitleView;
@@ -36,6 +39,7 @@ import com.github.tvbox.osc.util.M3u8;
 import com.github.tvbox.osc.util.PlayerHelper;
 import com.github.tvbox.osc.util.ScreenUtils;
 import com.github.tvbox.osc.util.SubtitleHelper;
+import com.github.tvbox.osc.util.VideoParseRuler;
 import com.lzy.okgo.OkGo;
 import com.lzy.okgo.callback.AbsCallback;
 import com.lzy.okgo.model.HttpHeaders;
@@ -48,6 +52,7 @@ import org.jetbrains.annotations.NotNull;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.xwalk.core.XWalkView;
 
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
@@ -1361,5 +1366,38 @@ public class VodController extends BaseController {
         } catch (JSONException e) {
         }
         return url;
+    }
+
+    public void evaluateScript(SourceBean sourceBean,String url, WebView web_view, XWalkView xWalk_view){
+        String clickSelector = sourceBean.getClickSelector().trim();
+        clickSelector=clickSelector.isEmpty()?VideoParseRuler.getHostScript(url):clickSelector;
+        if (!clickSelector.isEmpty()) {
+            String selector;
+            if (clickSelector.contains(";") && !clickSelector.endsWith(";")) {
+                String[] parts = clickSelector.split(";", 2);
+                if (!url.contains(parts[0])) {
+                    return;
+                }
+                selector = parts[1].trim();
+            } else {
+                selector = clickSelector.trim();
+            }
+            // 构造点击的 JS 代码
+            String js = selector;
+//            if(!selector.contains("click()"))js+=".click();";
+            LOG.i("echo-javascript:" + js);
+            if(web_view!=null){
+                //4.4以上才支持这种写法
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                    web_view.evaluateJavascript(js, null);
+                } else {
+                    web_view.loadUrl("javascript:" + js);
+                }
+            }
+            if(xWalk_view!=null){
+                //4.0+开始全部支持这种写法
+                xWalk_view.evaluateJavascript(js, null);
+            }
+        }
     }
 }

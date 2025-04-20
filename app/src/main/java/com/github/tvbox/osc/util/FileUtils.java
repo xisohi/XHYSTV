@@ -259,6 +259,7 @@ public class FileUtils {
     //JS  工具方法
     private static final Pattern URL_JOIN = Pattern.compile("^http.*\\.(js|txt|json)", Pattern.MULTILINE | Pattern.CASE_INSENSITIVE);
     public static String loadModule(String name) {
+        String rel = null;
         try {
             if (name.contains("gbk.js")) {
                 name = "gbk.js";
@@ -267,42 +268,42 @@ public class FileUtils {
             } else if (name.contains("cat.js")) {
                 name = "cat.js";
             }
+            LOG.i("echo-loadModule "+name);
             Matcher m = URL_JOIN.matcher(name);
             if (m.find()) {
                 if (!Hawk.get(HawkConfig.DEBUG_OPEN, false)) {
                     String cache = getCache(MD5.encode(name));
+                    rel= cache;
                     if (StringUtils.isEmpty(cache)) {
                         String netStr = get(name);
                         if (!TextUtils.isEmpty(netStr)) {
                             setCache(604800, MD5.encode(name), netStr);
                         }
-                        return netStr;
+                        rel= netStr;
                     }
-                    return cache;
                 } else {
-                    return get(name);
+                    rel= get(name);
                 }
             } else if (name.startsWith("assets://")) {
-                return getAsOpen(name.substring(9));
+                rel= getAsOpen(name.substring(9));
             } else if (isAsFile(name, "js/lib")) {
-                return getAsOpen("js/lib/" + name);
+                rel=getAsOpen("js/lib/" + name);
             } else if (name.startsWith("file://")) {
-                return get(ControlManager.get()
+                rel=get(ControlManager.get()
                         .getAddress(true) + "file/" + name.replace("file:///", "")
                         .replace("file://", ""));
             } else if (name.startsWith("clan://localhost/")) {
-                return get(ControlManager.get()
+                rel=get(ControlManager.get()
                         .getAddress(true) + "file/" + name.replace("clan://localhost/", ""));
             } else if (name.startsWith("clan://")) {
                 String substring = name.substring(7);
                 int indexOf = substring.indexOf(47);
-                return get("http://" + substring.substring(0, indexOf) + "/file/" + substring.substring(indexOf + 1));
+                rel=get("http://" + substring.substring(0, indexOf) + "/file/" + substring.substring(indexOf + 1));
             }
         } catch (Exception e) {
             e.printStackTrace();
-            return name;
         }
-        return name;
+        return rel;
     }
 
 
@@ -347,11 +348,10 @@ public class FileUtils {
                 return "";
             }
             JsonObject asJsonObject = (new Gson().fromJson(code, JsonObject.class)).getAsJsonObject();
-            if (((long) asJsonObject.get("expires").getAsInt()) > System.currentTimeMillis() / 1000) {
-                return asJsonObject.get("data").getAsString();
+            if (((long) asJsonObject.get("expires").getAsInt()) <= System.currentTimeMillis() / 1000) {
+                recursiveDelete(open(name));
             }
-            recursiveDelete(open(name));
-            return "";
+            return asJsonObject.get("data").getAsString();
         } catch (Exception e4) {
             return "";
         }

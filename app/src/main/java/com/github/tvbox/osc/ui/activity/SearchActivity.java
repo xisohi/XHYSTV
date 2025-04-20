@@ -35,6 +35,7 @@ import com.github.tvbox.osc.ui.dialog.SearchCheckboxDialog;
 import com.github.tvbox.osc.ui.tv.widget.SearchKeyboard;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.HawkConfig;
+import com.github.tvbox.osc.util.HistoryHelper;
 import com.github.tvbox.osc.util.SearchHelper;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.google.gson.Gson;
@@ -477,12 +478,7 @@ public class SearchActivity extends BaseActivity {
         etSearch.setText(title);
 
         //写入历史记录
-        ArrayList<String> history = Hawk.get(HawkConfig.SEARCH_HISTORY, new ArrayList<String>());
-        if (!history.contains(title))
-            history.add(0, title);
-        if (history.size() > 10)
-            history.remove(10);
-        Hawk.put(HawkConfig.SEARCH_HISTORY, history);
+        HistoryHelper.setSearchHistory(title);
 
 
         this.searchTitle = title;

@@ -244,7 +244,10 @@ public class JsSpider extends Spider {
             @Override
             public byte[] getModuleBytecode(String moduleName) {
                 String ss = FileUtils.loadModule(moduleName);
-                if (TextUtils.isEmpty(ss)) {return null;}
+                if (TextUtils.isEmpty(ss)) {
+                    LOG.i("echo-getModuleBytecode empty :"+ moduleName);
+                    return ctx.compileModule("", moduleName);
+                }
                 if(ss.startsWith("//DRPY")){
                     return Base64.decode(ss.replace("//DRPY",""), Base64.URL_SAFE);
                 } else if(ss.startsWith("//bb")){
@@ -350,6 +353,17 @@ public class JsSpider extends Spider {
         result[1] = array.opt(1);
         result[2] = getStream(array.opt(2));
         result[3] = headerAvailable ? getHeader(array.opt(3)) : null;
+        if (array.length() > 4) {
+            try {
+                if ( array.optInt(4) == 1) {
+                    String content = array.optString(2);
+                    if (content.contains("base64,")) content = content.substring(content.indexOf("base64,") + 7);
+                    result[2] = new ByteArrayInputStream(Base64.decode(content, Base64.DEFAULT));
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
         return result;
     }
 
