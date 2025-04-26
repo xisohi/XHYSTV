@@ -188,8 +188,8 @@ public class App extends MultiDexApplication {
                 Toast.makeText(this, getString(R.string.update_code_2003), Toast.LENGTH_SHORT).show();
                 break;
             case 2004:
-                // ToastUtils.showShort( "无最新版本");
-                //Toast.makeText(this, getString(R.string.update_code_2004), Toast.LENGTH_SHORT).show();
+                // ToastUtils.showShort( "已是最新版本");
+                Toast.makeText(this, getString(R.string.update_code_2004), Toast.LENGTH_SHORT).show();
                 break;
             case 2005:
                 // ToastUtils.showShort( "版本检查返回空");
