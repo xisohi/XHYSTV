@@ -15,6 +15,7 @@ import com.orhanobut.hawk.Hawk;
 import java.io.File;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -26,6 +27,7 @@ import xyz.doikki.videoplayer.ijk.IjkPlayer;
 public class IjkMediaPlayer extends IjkPlayer {
 
     private IJKCode codec = null;
+    protected String currentPlayPath;
 
     public IjkMediaPlayer(Context context, IJKCode codec) {
         super(context);
@@ -127,6 +129,7 @@ public class IjkMediaPlayer extends IjkPlayer {
         }
         setDataSourceHeader(headers);
         mMediaPlayer.setOption(tv.danmaku.ijk.media.player.IjkMediaPlayer.OPT_CATEGORY_FORMAT, "protocol_whitelist", "ijkio,ffio,async,cache,crypto,file,dash,http,https,ijkhttphook,ijkinject,ijklivehook,ijklongurl,ijksegment,ijktcphook,pipe,rtp,tcp,tls,udp,ijkurlhook,data");
+        currentPlayPath = path;
         super.setDataSource(path, null);
     }
 
@@ -219,10 +222,16 @@ public class IjkMediaPlayer extends IjkPlayer {
                 .replace(" ", "");
     }
 
+    /** 缓存：key=播放地址，value=已选的 {trackIndex} */
+    private static final Map<String, Integer> mTrackIndexCache = new HashMap<>();
     public void setTrack(int trackIndex) {
         int audioSelected = mMediaPlayer.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_AUDIO);
         int subtitleSelected = mMediaPlayer.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT);
         if (trackIndex!=audioSelected && trackIndex!=subtitleSelected){
+            // 缓存到 map：下次同一路径播放时使用
+            if (currentPlayPath != null) {
+                mTrackIndexCache.put(currentPlayPath, trackIndex);
+            }
             mMediaPlayer.selectTrack(trackIndex);
         }
     }
@@ -231,4 +240,15 @@ public class IjkMediaPlayer extends IjkPlayer {
         mMediaPlayer.setOnTimedTextListener(listener);
     }
 
+    public void loadDefaultTrack(TrackInfo trackInfo) {
+        Integer trackIndex = mTrackIndexCache.get(currentPlayPath);
+        if (trackIndex == null) {
+            if(trackInfo!=null && trackInfo.getAudio().size()>1){
+                int firsIndex=trackInfo.getAudio().get(0).index;
+                setTrack(firsIndex);
+            }
+            return;
+        };
+        setTrack(trackIndex);
+    }
 }

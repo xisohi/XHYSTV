@@ -182,7 +182,7 @@ public class SettingActivity extends BaseActivity {
         if (currentApi.equals(Hawk.get(HawkConfig.API_URL, ""))) {
             if(dnsOpt != Hawk.get(HawkConfig.DOH_URL, 0)){
                 AppManager.getInstance().finishAllActivity();
-                jumpActivity(HomeActivity.class, createBundle());
+                jumpActivity(HomeActivity.class);
             }
             else if ((homeSourceKey != null && !homeSourceKey.equals(Hawk.get(HawkConfig.HOME_API, "")))  || homeRec != Hawk.get(HawkConfig.HOME_REC, 0)) {
                 jumpActivity(HomeActivity.class, createBundle());

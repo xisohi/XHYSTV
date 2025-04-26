@@ -51,7 +51,11 @@ public class ExoMediaPlayer extends AbstractPlayer implements Player.Listener {
 
     private LoadControl mLoadControl;
     private RenderersFactory mRenderersFactory;
-    private TrackSelector mTrackSelector;
+    protected TrackSelector mTrackSelector;
+
+    protected DefaultTrackSelector trackSelector;
+
+    protected String currentPlayPath;
 
     public ExoMediaPlayer(Context context) {
         mAppContext = context.getApplicationContext();
@@ -76,7 +80,7 @@ public class ExoMediaPlayer extends AbstractPlayer implements Player.Listener {
         if (VideoViewManager.getConfig().mIsEnableLog && mTrackSelector instanceof MappingTrackSelector) {
             mInternalPlayer.addAnalyticsListener(new EventLogger((MappingTrackSelector) mTrackSelector, "ExoPlayer"));
         }
-
+        if(trackSelector == null)trackSelector=(DefaultTrackSelector)mTrackSelector;
         mInternalPlayer.addListener(this);
     }
 
@@ -95,6 +99,7 @@ public class ExoMediaPlayer extends AbstractPlayer implements Player.Listener {
     @Override
     public void setDataSource(String path, Map<String, String> headers) {
         Log.i("Tvbox-runtime","echo-setDataSource:"+path);
+        currentPlayPath = path;
         mMediaSource = mMediaSourceHelper.getMediaSource(path, headers);
     }
 

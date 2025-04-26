@@ -13,7 +13,7 @@
         <LinearLayout
             android:id="@+id/tv_top_l_container"
             android:layout_width="0dp"
-            android:layout_weight="4"
+            android:layout_weight="3"
             android:layout_height="wrap_content"
             android:tag="tv_top_container"
             android:visibility="gone"
@@ -75,6 +75,21 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="right">
+
+                <TextView
+                    android:id="@+id/net_play_speed"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:paddingTop="@dimen/vs_5"
+                    android:paddingRight="@dimen/vs_10"
+                    android:tag="vod_control_pause_time"
+                    android:text="0Gbs"
+                    android:textColor="@android:color/white"
+                    android:textSize="@dimen/ts_20"
+                    tools:ignore="RtlSymmetry" />
 
                 <TextView
                     android:id="@+id/tv_seek_time"
