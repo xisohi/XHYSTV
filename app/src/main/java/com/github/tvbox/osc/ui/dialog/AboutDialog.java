@@ -26,7 +26,7 @@ public class AboutDialog extends BaseDialog {
             PackageInfo packageInfo = pm.getPackageInfo(context.getPackageName(), 0);
             // 获取产品风味名称
             String flavorName = BuildConfig.FLAVOR;
-            appVersion.setText(flavorName + " Version " + packageInfo.versionName);
+            appVersion.setText(flavorName + " Version " + packageInfo.versionCode);
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
             appVersion.setText("Version: Unknown");
