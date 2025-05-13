@@ -880,8 +880,8 @@ public class VodController extends BaseController {
 
         long currentTime = System.currentTimeMillis();
         final int baseSkip = 10000; // 基础跳转10秒
-        final float accelerationFactor = 1.5f; // 连续操作时的加速因子
-        final long threshold = 500; // 操作间隔阈值500ms
+        final float accelerationFactor = 2.0f; // 连续操作时的加速因子
+        final long threshold = 800; // 操作间隔阈值500ms
 
         if (!simSlideStart) {
             simSlideStart = true;

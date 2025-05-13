@@ -6,6 +6,7 @@ import android.text.TextUtils;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.bean.IJKCode;
 import com.github.tvbox.osc.server.ControlManager;
+import com.github.tvbox.osc.util.AudioTrackMemory;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
@@ -28,10 +29,12 @@ public class IjkMediaPlayer extends IjkPlayer {
 
     private IJKCode codec = null;
     protected String currentPlayPath;
+    private static AudioTrackMemory memory;
 
     public IjkMediaPlayer(Context context, IJKCode codec) {
         super(context);
         this.codec = codec;
+        memory = AudioTrackMemory.getInstance(context);
     }
 
     @Override
@@ -222,15 +225,18 @@ public class IjkMediaPlayer extends IjkPlayer {
                 .replace(" ", "");
     }
 
-    /** 缓存：key=播放地址，value=已选的 {trackIndex} */
-    private static final Map<String, Integer> mTrackIndexCache = new HashMap<>();
     public void setTrack(int trackIndex) {
         int audioSelected = mMediaPlayer.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_AUDIO);
         int subtitleSelected = mMediaPlayer.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_TIMEDTEXT);
         if (trackIndex!=audioSelected && trackIndex!=subtitleSelected){
-            // 缓存到 map：下次同一路径播放时使用
-            if (currentPlayPath != null) {
-                mTrackIndexCache.put(currentPlayPath, trackIndex);
+            mMediaPlayer.selectTrack(trackIndex);
+        }
+    }
+    public void setTrack(int trackIndex,String playKey) {
+        int audioSelected = mMediaPlayer.getSelectedTrack(ITrackInfo.MEDIA_TRACK_TYPE_AUDIO);
+        if (trackIndex!=audioSelected){
+            if (!playKey.isEmpty()) {
+                memory.save(playKey, trackIndex);
             }
             mMediaPlayer.selectTrack(trackIndex);
         }
@@ -240,15 +246,15 @@ public class IjkMediaPlayer extends IjkPlayer {
         mMediaPlayer.setOnTimedTextListener(listener);
     }
 
-    public void loadDefaultTrack(TrackInfo trackInfo) {
-        Integer trackIndex = mTrackIndexCache.get(currentPlayPath);
-        if (trackIndex == null) {
-            if(trackInfo!=null && trackInfo.getAudio().size()>1){
+    public void loadDefaultTrack(TrackInfo trackInfo,String playKey) {
+        if(trackInfo!=null && trackInfo.getAudio().size()>1){
+            Integer trackIndex = memory.ijkLoad(playKey);
+            if (trackIndex == -1) {
                 int firsIndex=trackInfo.getAudio().get(0).index;
                 setTrack(firsIndex);
-            }
-            return;
-        };
-        setTrack(trackIndex);
+                return;
+            };
+            setTrack(trackIndex);
+        }
     }
 }

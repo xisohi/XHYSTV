@@ -3,6 +3,7 @@ package com.github.tvbox.osc.player;
 import android.content.Context;
 import android.util.Pair;
 
+import com.github.tvbox.osc.util.AudioTrackMemory;
 import com.github.tvbox.osc.util.LOG;
 import com.google.android.exoplayer2.Format;
 import com.google.android.exoplayer2.source.TrackGroup;
@@ -19,8 +20,11 @@ import java.util.Map;
 
 public class ExoPlayer extends ExoMediaPlayer {
 
+    private static AudioTrackMemory memory;
+
     public ExoPlayer(Context context) {
         super(context);
+        memory = AudioTrackMemory.getInstance(context);
     }
     // 3. 获取所有轨道信息
     public TrackInfo getTrackInfo() {
@@ -70,16 +74,12 @@ public class ExoPlayer extends ExoMediaPlayer {
         return data;
     }
 
-
-
-    /** 缓存：key=播放地址，value=已选的 {groupIndex, trackIndex} */
-    private static final Map<String, Pair<Integer, Integer>> mTrackOverrideCache = new HashMap<>();
     /**
      * 设置当前播放的音轨
      * @param groupIndex 音轨组的索引
      * @param trackIndex 音轨在组内的索引
      */
-    public void setTrack(int groupIndex, int trackIndex) {
+    public void setTrack(int groupIndex, int trackIndex,String playKey) {
         try {
             MappingTrackSelector.MappedTrackInfo mappedInfo = trackSelector.getCurrentMappedTrackInfo();
             if (mappedInfo == null) {
@@ -103,18 +103,17 @@ public class ExoPlayer extends ExoMediaPlayer {
             trackSelector.setParameters(builder.build());
 
             // 缓存到 map：下次同一路径播放时使用
-            if (currentPlayPath != null) {
-                mTrackOverrideCache.put(currentPlayPath, Pair.create(groupIndex, trackIndex));
+            if (!playKey.isEmpty()) {
+                memory.save(playKey,groupIndex,trackIndex);
             }
         } catch (Exception e) {
             LOG.i("echo-setTrack error: " + e.getMessage());
         }
     }
 
-
     //加载上一次选中的音轨
-    public void loadDefaultTrack() {
-        Pair<Integer, Integer> pair = mTrackOverrideCache.get(currentPlayPath);
+    public void loadDefaultTrack(String playKey) {
+        Pair<Integer, Integer> pair = memory.exoLoad(playKey);
         if (pair == null) return;
 
         MappingTrackSelector.MappedTrackInfo mappedInfo = trackSelector.getCurrentMappedTrackInfo();

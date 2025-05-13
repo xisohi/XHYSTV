@@ -381,8 +381,8 @@ public class PlayActivity extends BaseActivity {
                     }
                     mediaPlayer.pause();
                     long progress = mediaPlayer.getCurrentPosition();//保存当前进度，ijk 切换轨道 会有快进几秒
-                    if (mediaPlayer instanceof IjkMediaPlayer)((IjkMediaPlayer)mediaPlayer).setTrack(value.index);
-                    if (mediaPlayer instanceof ExoPlayer)((ExoPlayer)mediaPlayer).setTrack(value.groupIndex,value.index);
+                    if (mediaPlayer instanceof IjkMediaPlayer)((IjkMediaPlayer)mediaPlayer).setTrack(value.index,progressKey);
+                    if (mediaPlayer instanceof ExoPlayer)((ExoPlayer)mediaPlayer).setTrack(value.groupIndex,value.index,progressKey);
                     new Handler().postDelayed(new Runnable() {
                         @Override
                         public void run() {
@@ -587,7 +587,7 @@ public class PlayActivity extends BaseActivity {
                 mController.mSubtitleView.hasInternal = true;
             }
             //默认选中第一个音轨 一般第一个音轨是国语 && 加载上一次选中的
-            ((IjkMediaPlayer)mVideoView.getMediaPlayer()).loadDefaultTrack(trackInfo);
+            ((IjkMediaPlayer)mVideoView.getMediaPlayer()).loadDefaultTrack(trackInfo,progressKey);
             ((IjkMediaPlayer)(mVideoView.getMediaPlayer())).setOnTimedTextListener(new IMediaPlayer.OnTimedTextListener() {
                 @Override
                 public void onTimedText(IMediaPlayer mp, IjkTimedText text) {
@@ -602,7 +602,7 @@ public class PlayActivity extends BaseActivity {
         }
         if(mVideoView.getMediaPlayer() instanceof ExoPlayer){
             //加载上一次选中的
-            ((ExoPlayer) mVideoView.getMediaPlayer()).loadDefaultTrack();
+            ((ExoPlayer) mVideoView.getMediaPlayer()).loadDefaultTrack(progressKey);
         }
         mController.mSubtitleView.bindToMediaPlayer(mVideoView.getMediaPlayer());
         mController.mSubtitleView.setPlaySubtitleCacheKey(subtitleCacheKey);
@@ -952,6 +952,7 @@ public class PlayActivity extends BaseActivity {
 
         stopParse();
         initParseLoadFound();
+        allowSwitchPlayer = true;
         mController.stopOther();
         if(mVideoView!=null) mVideoView.release();
         subtitleCacheKey = mVodInfo.sourceKey + "-" + mVodInfo.id + "-" + mVodInfo.playFlag + "-" + mVodInfo.playIndex+ "-" + vs.name + "-subt";
@@ -1655,13 +1656,13 @@ public class PlayActivity extends BaseActivity {
                     loadFoundVideoUrlsHeader.put(url, headers);
                     LOG.i("echo-loadFoundVideoUrl:" + url );
                     if (loadFoundCount.incrementAndGet() == 1) {
+                        stopLoadWebView(false);
+                        SuperParse.stopJsonJx();
                         url = loadFoundVideoUrls.poll();
                         mHandler.removeMessages(100);
                         String cookie = CookieManager.getInstance().getCookie(url);
                         if(!TextUtils.isEmpty(cookie))headers.put("Cookie", " " + cookie);//携带cookie
                         playUrl(url, headers);
-                        SuperParse.stopJsonJx();
-                        stopLoadWebView(false);
                     }
                 }
             }
@@ -1843,13 +1844,13 @@ public class PlayActivity extends BaseActivity {
                     loadFoundVideoUrlsHeader.put(url, webHeaders);
                     LOG.i("echo-loadFoundVideoUrl:" + url );
                     if (loadFoundCount.incrementAndGet() == 1) {
+                        SuperParse.stopJsonJx();
+                        stopLoadWebView(false);
                         mHandler.removeMessages(100);
                         url = loadFoundVideoUrls.poll();
                         String cookie = CookieManager.getInstance().getCookie(url);
                         if(!TextUtils.isEmpty(cookie))webHeaders.put("Cookie", " " + cookie);//携带cookie
                         playUrl(url, webHeaders);
-                        SuperParse.stopJsonJx();
-                        stopLoadWebView(false);
                     }
                 }
             }
