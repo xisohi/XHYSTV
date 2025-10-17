@@ -57,6 +57,14 @@ android {
             }
         }
     }
+
+    // 禁用 ABI 分割
+    splits {
+        abi {
+            enable false // 禁用 ABI 分割
+        }
+    }
+
     applicationVariants.configureEach { variant ->
         variant.outputs.configureEach { output ->
             def flavorNames = variant.productFlavors.collect { it.name == "normal" ? "java" : it.name }.join('-')
