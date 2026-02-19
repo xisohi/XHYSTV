@@ -58,6 +58,9 @@ import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.MD5;
 import com.github.tvbox.osc.util.Updater;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
+import com.hjq.permissions.OnPermissionCallback;
+import com.hjq.permissions.Permission;
+import com.hjq.permissions.XXPermissions;
 import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
 import com.owen.tvrecyclerview.widget.V7GridLayoutManager;
@@ -745,23 +748,52 @@ public class HomeActivity extends BaseActivity {
      * 启动时检查更新（每天只检查一次）
      */
     private void checkUpdateOnStart() {
-        // 获取今天日期
         String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                 .format(new Date());
-
-        // 上次检查日期
         String lastCheck = Hawk.get(HawkConfig.UPDATE_CHECK_DATE, "");
-
-        // 今天没检查过
         if (!today.equals(lastCheck)) {
-            // 记录今天已检查
             Hawk.put(HawkConfig.UPDATE_CHECK_DATE, today);
-
-            // 延迟 5 秒检查，等首页完全加载
-            mHandler.postDelayed(() -> {
-                // 静默模式：有更新才弹窗，无更新不提示
-                Updater.create().silent().start(HomeActivity.this);
-            }, 5000);
+            // 延迟 5 秒后执行权限检查和更新
+            mHandler.postDelayed(this::checkPermissionsAndUpdate, 5000);
         }
+    }
+
+    // 新增权限检查方法
+    private void checkPermissionsAndUpdate() {
+        if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
+            // 已有权限，直接更新
+            performUpdate();
+        } else {
+            // 请求存储权限
+            XXPermissions.with(this)
+                    .permission(Permission.Group.STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(List<String> permissions, boolean all) {
+                            if (all) {
+                                performUpdate();
+                            }
+                        }
+
+                        @Override
+                        public void onDenied(List<String> permissions, boolean never) {
+                            if (never) {
+                                Toast.makeText(HomeActivity.this,
+                                        "获取存储权限失败，请在系统设置中开启",
+                                        Toast.LENGTH_SHORT).show();
+                                XXPermissions.startPermissionActivity(HomeActivity.this, permissions);
+                            } else {
+                                Toast.makeText(HomeActivity.this,
+                                        "获取存储权限失败",
+                                        Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+        }
+    }
+
+    // 实际执行更新的方法
+    private void performUpdate() {
+        Updater.create().silent().start(HomeActivity.this);
     }
 }

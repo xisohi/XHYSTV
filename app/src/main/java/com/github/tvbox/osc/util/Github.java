@@ -19,9 +19,8 @@ public class Github {
      * 代理加速源列表（按推荐优先级排序）
      */
     private static final String[] PROXY_URLS = {
-            "https://mirror.ghproxy.com/",
-            "https://ghfast.top/",              // 稳定（备用）
             "https://ghproxy.net/",             // 国内速度快，首选
+            "https://ghfast.top/",              // 稳定（备用）
             "https://github.catvod.com/",       // 猫影视git文件加速
             "https://gh.xisohi.dpdns.org/"      // 个人维护（备用）
     };
