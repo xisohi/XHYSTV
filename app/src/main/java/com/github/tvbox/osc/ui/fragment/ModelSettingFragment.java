@@ -10,6 +10,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.DiffUtil;
 
+import com.github.tvbox.osc.BuildConfig;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.base.BaseActivity;
@@ -22,7 +23,6 @@ import com.github.tvbox.osc.ui.activity.HomeActivity;
 import com.github.tvbox.osc.ui.activity.SettingActivity;
 import com.github.tvbox.osc.ui.adapter.ApiHistoryDialogAdapter;
 import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
-import com.github.tvbox.osc.ui.dialog.AboutDialog;
 import com.github.tvbox.osc.ui.dialog.ApiDialog;
 import com.github.tvbox.osc.ui.dialog.ApiHistoryDialog;
 import com.github.tvbox.osc.ui.dialog.BackupDialog;
@@ -33,9 +33,9 @@ import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.HistoryHelper;
-import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.PlayerHelper;
+import com.github.tvbox.osc.util.Updater;
 import com.lzy.okgo.OkGo;
 import com.lzy.okgo.callback.FileCallback;
 import com.lzy.okgo.model.Progress;
@@ -49,7 +49,6 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
-import okhttp3.HttpUrl;
 import tv.danmaku.ijk.media.player.IjkMediaPlayer;
 
 /**
@@ -119,7 +118,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
         tvApi.setText(Hawk.get(HawkConfig.API_URL, ""));
 
         tvDns.setText(OkGoHelper.dnsHttpsList.get(Hawk.get(HawkConfig.DOH_URL, 0)));
-        tvHomeRec.setText(getHomeRecName(Hawk.get(HawkConfig.HOME_REC, 0)));
+        tvHomeRec.setText(getHomeRecName(Hawk.get(HawkConfig.HOME_REC, 2)));  //观看历史
         tvHistoryNum.setText(HistoryHelper.getHistoryNumName(Hawk.get(HawkConfig.HISTORY_NUM, 0)));
         tvSearchView.setText(getSearchView(Hawk.get(HawkConfig.SEARCH_VIEW, 0)));
         tvHomeApi.setText(ApiConfig.get().getHomeSourceBean().getName());
@@ -129,6 +128,9 @@ public class ModelSettingFragment extends BaseLazyFragment {
         tvIjkCachePlay.setText(Hawk.get(HawkConfig.IJK_CACHE_PLAY, false) ? "开启" : "关闭");
         tvHomeDefaultShow = findViewById(R.id.tvHomeText);
         tvHomeDefaultShow.setText(Hawk.get(HawkConfig.DEFAULT_LOAD_LIVE, false) ? "直播" : "点播");
+        TextView tvVersion = findViewById(R.id.versionText);
+        tvVersion.setText(BuildConfig.VERSION_NAME);
+
         findViewById(R.id.llDebug).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -164,13 +166,10 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 dialog.show();
             }
         });
-        findViewById(R.id.llAbout).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                FastClickCheckUtil.check(v);
-                AboutDialog dialog = new AboutDialog(mActivity);
-                dialog.show();
-            }
+        findViewById(R.id.Version).setOnClickListener(v -> {
+            FastClickCheckUtil.check(v);
+            // 强制检查更新
+            Updater.create().force().start(mActivity);
         });
         findViewById(R.id.llWp).setOnClickListener(new View.OnClickListener() {
             @Override

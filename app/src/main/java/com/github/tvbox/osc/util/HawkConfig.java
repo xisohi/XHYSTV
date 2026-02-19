@@ -51,4 +51,5 @@ public class HawkConfig {
     public static final String DEFAULT_LOAD_LIVE = "DEFAULT_LOAD_LIVE";
     public static final String SEARCH_HISTORY = "search_history";
     public static boolean hotVodDelete;
+    public static final String UPDATE_CHECK_DATE = "update_check_date";
 }

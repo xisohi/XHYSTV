@@ -56,6 +56,7 @@ import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
 import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.MD5;
+import com.github.tvbox.osc.util.Updater;
 import com.github.tvbox.osc.viewmodel.SourceViewModel;
 import com.orhanobut.hawk.Hawk;
 import com.owen.tvrecyclerview.widget.TvRecyclerView;
@@ -73,6 +74,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 
 import me.jessyan.autosize.utils.AutoSizeUtils;
@@ -121,6 +123,7 @@ public class HomeActivity extends BaseActivity {
         ControlManager.get().startServer();
         initView();
         initViewModel();
+        checkUpdateOnStart();
         useCacheConfig = false;
         Intent intent = getIntent();
         if (intent != null && intent.getExtras() != null) {
@@ -449,7 +452,7 @@ public class HomeActivity extends BaseActivity {
         if (sortAdapter.getData().size() > 0) {
             for (MovieSort.SortData data : sortAdapter.getData()) {
                 if (data.id.equals("my0")) {
-                    if (Hawk.get(HawkConfig.HOME_REC, 0) == 1 && absXml != null && absXml.videoList != null && absXml.videoList.size() > 0) {
+                    if (Hawk.get(HawkConfig.HOME_REC, 2) == 1 && absXml != null && absXml.videoList != null && absXml.videoList.size() > 0) {
                         fragments.add(UserFragment.newInstance(absXml.videoList));
                     } else {
                         fragments.add(UserFragment.newInstance(null));
@@ -737,5 +740,28 @@ public class HomeActivity extends BaseActivity {
         blinkAnimation.setRepeatMode(Animation.REVERSE);
         blinkAnimation.setRepeatCount(Animation.INFINITE);
         tvName.startAnimation(blinkAnimation);
+    }
+    /**
+     * 启动时检查更新（每天只检查一次）
+     */
+    private void checkUpdateOnStart() {
+        // 获取今天日期
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                .format(new Date());
+
+        // 上次检查日期
+        String lastCheck = Hawk.get(HawkConfig.UPDATE_CHECK_DATE, "");
+
+        // 今天没检查过
+        if (!today.equals(lastCheck)) {
+            // 记录今天已检查
+            Hawk.put(HawkConfig.UPDATE_CHECK_DATE, today);
+
+            // 延迟 5 秒检查，等首页完全加载
+            mHandler.postDelayed(() -> {
+                // 静默模式：有更新才弹窗，无更新不提示
+                Updater.create().silent().start(HomeActivity.this);
+            }, 5000);
+        }
     }
 }
