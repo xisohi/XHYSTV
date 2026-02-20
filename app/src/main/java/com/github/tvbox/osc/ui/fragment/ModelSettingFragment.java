@@ -118,7 +118,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
         tvApi.setText(Hawk.get(HawkConfig.API_URL, ""));
 
         tvDns.setText(OkGoHelper.dnsHttpsList.get(Hawk.get(HawkConfig.DOH_URL, 0)));
-        tvHomeRec.setText(getHomeRecName(Hawk.get(HawkConfig.HOME_REC, 2)));  //观看历史
+        tvHomeRec.setText(getHomeRecName(Hawk.get(HawkConfig.HOME_REC, 0)));
         tvHistoryNum.setText(HistoryHelper.getHistoryNumName(Hawk.get(HawkConfig.HISTORY_NUM, 0)));
         tvSearchView.setText(getSearchView(Hawk.get(HawkConfig.SEARCH_VIEW, 0)));
         tvHomeApi.setText(ApiConfig.get().getHomeSourceBean().getName());
