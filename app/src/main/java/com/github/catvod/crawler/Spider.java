@@ -2,7 +2,7 @@ package com.github.catvod.crawler;
 
 import android.content.Context;
 
-import com.github.tvbox.osc.util.OkGoHelper;
+import com.github.catvod.net.OkHttp;
 
 import org.json.JSONObject;
 
@@ -11,10 +11,12 @@ import java.util.List;
 import java.util.Map;
 
 import okhttp3.Dns;
+import okhttp3.OkHttpClient;
 
 public class Spider {
 
     public static JSONObject empty = new JSONObject();
+    public String siteKey;
 
     protected static Context mContext;
 
@@ -79,6 +81,10 @@ public class Spider {
         return "";
     }
 
+    public String searchContent(String key, boolean quick, String pg) {
+        return searchContent(key, quick);
+    }
+
     /**
      * 播放信息
      *
@@ -118,7 +124,11 @@ public class Spider {
     }
 
     public static Dns safeDns() {
-        return OkGoHelper.dnsOverHttps;
+        return OkHttp.dns();
+    }
+
+    public static OkHttpClient client() {
+        return OkHttp.client();
     }
 
     /**
@@ -139,6 +149,14 @@ public class Spider {
      * @return
      */
     public Object[] proxyLocal(Map< String, String > params) {
+        return null;
+    }
+
+    public Object[] proxy(Map<String, String> params) {
+        return proxyLocal(params);
+    }
+
+    public String action(String action) {
         return null;
     }
 }

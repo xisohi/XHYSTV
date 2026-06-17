@@ -29,7 +29,10 @@ public class LiveChannelItemAdapter extends BaseQuickAdapter<LiveChannelItem, Ba
         TextView tvChannel = holder.getView(R.id.tvChannelName);
         tvChannelNum.setText(String.format("%s", item.getChannelNum()));
         tvChannel.setText(item.getChannelName());
+        tvChannelNum.setSelected(true);
+        tvChannel.setSelected(true);
         int channelIndex = item.getChannelIndex();
+        holder.itemView.setSelected(channelIndex == selectedChannelIndex);
         if (channelIndex == selectedChannelIndex && channelIndex != focusedChannelIndex) {
             tvChannelNum.setTextColor(mContext.getResources().getColor(R.color.color_1890FF));
             tvChannel.setTextColor(mContext.getResources().getColor(R.color.color_1890FF));

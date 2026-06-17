@@ -10,6 +10,8 @@ public class HawkConfig {
     public static final String EPG_URL = "epg_url";
     public static final String SHOW_PREVIEW = "show_preview";
     public static final String API_HISTORY = "api_history";
+    public static final String API_LINE_LIST = "api_line_list";
+    public static final String API_LINE_SOURCE = "api_line_source";
     public static final String LIVE_API_HISTORY = "live_api_history";
     public static final String EPG_HISTORY = "epg_history";
     public static final String HOME_API = "home_api";
@@ -31,6 +33,7 @@ public class HawkConfig {
     public static final String LIVE_CROSS_GROUP = "live_cross_group";
     public static final String LIVE_CONNECT_TIMEOUT = "live_connect_timeout";
     public static final String LIVE_SHOW_NET_SPEED = "live_show_net_speed";
+    public static final String LIVE_SHOW_RESOLUTION = "live_show_resolution";
     public static final String LIVE_SHOW_TIME = "live_show_time";
     public static final String FAST_SEARCH_MODE = "fast_search_mode";
     public static final String SUBTITLE_TEXT_SIZE = "subtitle_text_size";
@@ -46,6 +49,7 @@ public class HawkConfig {
     public static final String LIVE_GROUP_LIST = "live_group_list";
     public static final String LIVE_API_URL = "live_api_url";
     public static final String M3U8_PURIFY = "m3u8_purify";
+    public static final String AUTO_SWITCH_LINE = "auto_switch_line";
     public static final String SCREEN_DISPLAY = "screen_display";
     public static final String LIVE_WEB_HEADER = "live_web_header";
     public static final String DEFAULT_LOAD_LIVE = "DEFAULT_LOAD_LIVE";

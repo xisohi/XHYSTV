@@ -28,7 +28,9 @@ public class LiveSettingGroupAdapter extends BaseQuickAdapter<LiveSettingGroup, 
     protected void convert(BaseViewHolder holder, LiveSettingGroup group) {
         TextView tvGroupName = holder.getView(R.id.tvSettingGroupName);
         tvGroupName.setText(group.getGroupName());
+        tvGroupName.setSelected(true);
         int groupIndex = group.getGroupIndex();
+        holder.itemView.setSelected(groupIndex == selectedGroupIndex);
         if (groupIndex == selectedGroupIndex && groupIndex != focusedGroupIndex) {
             tvGroupName.setTextColor(mContext.getResources().getColor(R.color.color_1890FF));
         } else {

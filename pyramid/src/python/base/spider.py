@@ -67,19 +67,30 @@ class Spider(metaclass=ABCMeta):
     def getDependence(self):
         return []
 
+    def setExtendInfo(self, extend):
+        self.extend = extend
+
     def loadSpider(self, name):
         return self.loadModule(name).Spider()
 
-    def loadModule(self, name):
-        path = os.path.join(os.path.join("../plugin"),  f'{name}.py')
+    def loadModule(self, name, fileName=None):
+        path = fileName if fileName else os.path.join(os.path.join("../plugin"), f'{name}.py')
         return SourceFileLoader(name, path).load_module()
 
-    def regStr(self, reg, src, group=1):
-        m = re.search(reg, src)
-        src = ''
-        if m:
-            src = m.group(group)
-        return src
+    def regStr(self, src, reg=None, group=1):
+        if reg is None:
+            return ''
+        match = None
+        try:
+            match = re.search(reg, src)
+        except Exception:
+            pass
+        if not match:
+            try:
+                match = re.search(src, reg)
+            except Exception:
+                pass
+        return match.group(group) if match else ''
 
     def removeHtmlTags(self, src):
         clean = re.compile('<.*?>')
@@ -90,7 +101,7 @@ class Spider(metaclass=ABCMeta):
                        src)
         return clean
 
-    def fetch(self, url, params=None, cookies=None, headers=None, timeout=5, verify=True, stream=False,
+    def fetch(self, url, headers=None, cookies=None, params=None, timeout=15, verify=True, stream=False,
               allow_redirects=True):
         rsp = requests.get(url, params=params, cookies=cookies, headers=headers, timeout=timeout, verify=verify,
                            stream=stream, allow_redirects=allow_redirects)
@@ -103,7 +114,7 @@ class Spider(metaclass=ABCMeta):
             cleaned = "DefaultValue"  # 根据需求替换为合适的默认值
         return cleaned
 
-    def post(self, url, params=None, data=None, json=None, cookies=None, headers=None, timeout=5, verify=True, stream=False, allow_redirects=True):
+    def post(self, url, data=None, headers=None, cookies=None, params=None, json=None, timeout=15, verify=True, stream=False, allow_redirects=True):
         # 如果 headers 不为 None，则对其进行预处理
         if headers:
             headers = {k: self._clean_header_value(v) for k, v in headers.items()}
@@ -112,14 +123,26 @@ class Spider(metaclass=ABCMeta):
         rsp.encoding = 'utf-8'
         return rsp
 
+    def postJson(self, url, json, headers=None, cookies=None):
+        rsp = requests.post(url, json=json, headers=headers, cookies=cookies)
+        rsp.encoding = 'utf-8'
+        return rsp
+
     def html(self, content):
         return etree.HTML(content)
 
-    def str2json(str):
-        return json.loads(str)
+    def xpText(self, root, expr):
+        ele = root.xpath(expr)
+        if len(ele) == 0:
+            return ''
+        else:
+            return ele[0]
 
-    def json2str(str):
-        return json.dumps(str, ensure_ascii=False)
+    def str2json(self, content):
+        return json.loads(content)
+
+    def json2str(self, content):
+        return json.dumps(content, ensure_ascii=False)
 
     def getProxyUrl(self, local=True):
         return f'{Proxy.getUrl(self,local)}?do=py'

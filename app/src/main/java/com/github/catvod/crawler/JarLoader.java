@@ -113,6 +113,7 @@ public class JarLoader {
                 classLoaders.put(key, classLoader);
             }
         } catch (Throwable th) {
+            Log.i("JarLoader", "echo-loadClassLoader error key=" + key + ", msg=" + th.getMessage());
             th.printStackTrace();
         }
         return success;
@@ -186,7 +187,10 @@ public class JarLoader {
         recentJarKey = jarKey;
         assert jarKey != null;
         DexClassLoader classLoader = jarKey.equals("main")? classLoaders.get("main"):loadJarInternal(jarUrl, jarMd5, jarKey);
-        if (classLoader == null) return new SpiderNull();
+        if (classLoader == null) {
+            Log.i("JarLoader", "echo-getSpider classLoader null key=" + key + ", jarKey=" + jarKey + ", jarUrl=" + jarUrl);
+            return new SpiderNull();
+        }
         try {
             Log.i("JarLoader", "echo-getSpider 加载spider: " + key);
             Spider sp = (Spider) classLoader.loadClass("com.github.catvod.spider." + clsKey).newInstance();
@@ -197,6 +201,7 @@ public class JarLoader {
             spiders.put(key, sp);
             return sp;
         } catch (Throwable th) {
+            Log.i("JarLoader", "echo-getSpider error key=" + key + ", clsKey=" + clsKey + ", msg=" + th.getMessage());
             th.printStackTrace();
         }
         return new SpiderNull();

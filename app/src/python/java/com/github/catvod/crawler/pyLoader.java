@@ -30,6 +30,8 @@ public class pyLoader implements IPyLoader {
     @Override
     public void clear() {
         spiders.clear();
+        pythonLoader.clear();
+        lastConfig = null;
     }
 
     @Override

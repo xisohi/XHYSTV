@@ -7,7 +7,6 @@ import android.text.TextUtils;
 import com.google.android.exoplayer2.C;
 import com.google.android.exoplayer2.MediaItem;
 import com.google.android.exoplayer2.database.ExoDatabaseProvider;
-import com.google.android.exoplayer2.ext.okhttp.OkHttpDataSource;
 import com.google.android.exoplayer2.ext.rtmp.RtmpDataSourceFactory;
 import com.google.android.exoplayer2.source.MediaSource;
 import com.google.android.exoplayer2.source.ProgressiveMediaSource;
@@ -16,6 +15,7 @@ import com.google.android.exoplayer2.source.hls.HlsMediaSource;
 import com.google.android.exoplayer2.source.rtsp.RtspMediaSource;
 import com.google.android.exoplayer2.upstream.DataSource;
 import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
+import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
 import com.google.android.exoplayer2.upstream.cache.Cache;
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
 import com.google.android.exoplayer2.upstream.cache.LeastRecentlyUsedCacheEvictor;
@@ -23,11 +23,9 @@ import com.google.android.exoplayer2.upstream.cache.SimpleCache;
 import com.google.android.exoplayer2.util.Util;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.util.Iterator;
 import java.util.Map;
 
-import okhttp3.Call;
 import okhttp3.OkHttpClient;
 
 public final class ExoMediaSourceHelper {
@@ -36,8 +34,7 @@ public final class ExoMediaSourceHelper {
 
     private final String mUserAgent;
     private final Context mAppContext;
-    private OkHttpDataSource.Factory mHttpDataSourceFactory;
-    private OkHttpClient mOkClient = null;
+    private DefaultHttpDataSource.Factory mHttpDataSourceFactory;
     private Cache mCache;
 
     private ExoMediaSourceHelper(Context context) {
@@ -57,7 +54,9 @@ public final class ExoMediaSourceHelper {
     }
 
     public void setOkClient(OkHttpClient client) {
-        mOkClient = client;
+        // Keep this API for callers, but use ExoPlayer's built-in HTTP data source.
+        // The old extension-okhttp artifact is binary-incompatible with ExoPlayer 2.19.x
+        // when HTTP error responses are thrown.
     }
 
     public MediaSource getMediaSource(String uri) {
@@ -105,11 +104,24 @@ public final class ExoMediaSourceHelper {
         fileName = fileName.toLowerCase();
         if (fileName.contains(".mpd") || fileName.contains("type=mpd")) {
             return C.TYPE_DASH;
-        } else if (fileName.contains("m3u8")) {
+        } else if (isHlsUri(fileName)) {
             return C.TYPE_HLS;
         } else {
             return C.TYPE_OTHER;
         }
+    }
+
+    private boolean isHlsUri(String uri) {
+        if (uri.contains("m3u8") || uri.contains("type=hls") || uri.contains("format=hls")) {
+            return true;
+        }
+        Uri parsedUri = Uri.parse(uri);
+        String path = parsedUri.getPath();
+        if (path == null) {
+            return false;
+        }
+        path = path.toLowerCase();
+        return path.endsWith("/live.php") || path.contains("/live/");
     }
 
     private DataSource.Factory getCacheDataSourceFactory() {
@@ -153,9 +165,9 @@ public final class ExoMediaSourceHelper {
      */
     private DataSource.Factory getHttpDataSourceFactory() {
         if (mHttpDataSourceFactory == null) {
-            mHttpDataSourceFactory = new OkHttpDataSource.Factory((Call.Factory) mOkClient)
-                    .setUserAgent(mUserAgent)/*
-                    .setAllowCrossProtocolRedirects(true)*/;
+            mHttpDataSourceFactory = new DefaultHttpDataSource.Factory()
+                    .setUserAgent(mUserAgent)
+                    .setAllowCrossProtocolRedirects(true);
         }
         return mHttpDataSourceFactory;
     }
@@ -166,13 +178,7 @@ public final class ExoMediaSourceHelper {
             if (headers.containsKey("User-Agent")) {
                 String value = headers.remove("User-Agent");
                 if (!TextUtils.isEmpty(value)) {
-                    try {
-                        Field userAgentField = mHttpDataSourceFactory.getClass().getDeclaredField("userAgent");
-                        userAgentField.setAccessible(true);
-                        userAgentField.set(mHttpDataSourceFactory, value.trim());
-                    } catch (Exception e) {
-                        //ignore
-                    }
+                    mHttpDataSourceFactory.setUserAgent(value.trim());
                 }
             }
             Iterator<String> iter = headers.keySet().iterator();

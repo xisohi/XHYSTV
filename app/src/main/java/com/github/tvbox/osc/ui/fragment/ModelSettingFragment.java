@@ -3,7 +3,9 @@ package com.github.tvbox.osc.ui.fragment;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
 import android.view.View;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -64,6 +66,10 @@ public class ModelSettingFragment extends BaseLazyFragment {
     private TextView tvRender;
     private TextView tvScale;
     private TextView tvApi;
+    private TextView tvApiLine;
+    private View llApi;
+    private View llApiHistory;
+    private View llApiLine;
     private TextView tvHomeApi;
     private TextView tvDns;
     private TextView tvHomeRec;
@@ -72,6 +78,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
     private TextView tvShowPreviewText;
     private TextView tvFastSearchText;
     private TextView tvm3u8AdText;
+    private TextView tvAutoSwitchLineText;
     private TextView tvRecStyleText;
     private TextView tvIjkCachePlay;
     private TextView tvHomeDefaultShow;
@@ -92,9 +99,11 @@ public class ModelSettingFragment extends BaseLazyFragment {
     @Override
     protected void init() {
         tvFastSearchText = findViewById(R.id.showFastSearchText);
-        tvFastSearchText.setText(Hawk.get(HawkConfig.FAST_SEARCH_MODE, false) ? "开启" : "关闭");
+        tvFastSearchText.setText(Hawk.get(HawkConfig.FAST_SEARCH_MODE, true) ? "开启" : "关闭");
         tvm3u8AdText = findViewById(R.id.m3u8AdText);
         tvm3u8AdText.setText(Hawk.get(HawkConfig.M3U8_PURIFY, false) ? "开启" : "关闭");
+        tvAutoSwitchLineText = findViewById(R.id.autoSwitchLineText);
+        tvAutoSwitchLineText.setText(Hawk.get(HawkConfig.AUTO_SWITCH_LINE, true) ? "开启" : "关闭");
         tvRecStyleText = findViewById(R.id.showRecStyleText);
         tvRecStyleText.setText(Hawk.get(HawkConfig.HOME_REC_STYLE, false) ? "是" : "否");
         tvShowPreviewText = findViewById(R.id.showPreviewText);
@@ -105,7 +114,11 @@ public class ModelSettingFragment extends BaseLazyFragment {
         tvPlay = findViewById(R.id.tvPlay);
         tvRender = findViewById(R.id.tvRenderType);
         tvScale = findViewById(R.id.tvScaleType);
+        llApi = findViewById(R.id.llApi);
+        llApiHistory = findViewById(R.id.llApiHistory);
+        llApiLine = findViewById(R.id.llApiLine);
         tvApi = findViewById(R.id.tvApi);
+        tvApiLine = findViewById(R.id.tvApiLine);
         tvHomeApi = findViewById(R.id.tvHomeApi);
         tvDns = findViewById(R.id.tvDns);
         tvHomeRec = findViewById(R.id.tvHomeRec);
@@ -116,6 +129,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
         tvDebugOpen.setText(Hawk.get(HawkConfig.DEBUG_OPEN, false) ? "已打开" : "已关闭");
         tvParseWebView.setText(Hawk.get(HawkConfig.PARSE_WEBVIEW, true) ? "系统自带" : "XWalkView");
         tvApi.setText(Hawk.get(HawkConfig.API_URL, ""));
+        refreshApiLineText();
 
         tvDns.setText(OkGoHelper.dnsHttpsList.get(Hawk.get(HawkConfig.DOH_URL, 0)));
         tvHomeRec.setText(getHomeRecName(Hawk.get(HawkConfig.HOME_REC, 0)));
@@ -292,8 +306,16 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 dialog.setOnListener(new ApiDialog.OnListener() {
                     @Override
                     public void onchange(String api) {
+                        String oldApi = Hawk.get(HawkConfig.API_URL, "");
                         Hawk.put(HawkConfig.API_URL, api);
+                        if (!HistoryHelper.isApiLineHistory(api)) {
+                            HistoryHelper.clearApiLineList();
+                        }
                         tvApi.setText(api);
+                        refreshApiLineText();
+                        if (!oldApi.equals(api)) {
+                            restartAppAfterConfigChanged();
+                        }
                     }
                 });
                 dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
@@ -322,11 +344,19 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 dialog.setAdapter(new ApiHistoryDialogAdapter.SelectDialogInterface() {
                     @Override
                     public void click(String value) {
+                        String oldApi = Hawk.get(HawkConfig.API_URL, "");
+                        if (!HistoryHelper.isApiLineHistory(value)) {
+                            HistoryHelper.clearApiLineList();
+                        }
                         Hawk.put(HawkConfig.API_URL, value);
                         Hawk.put(HawkConfig.LIVE_API_URL, value);
                         HistoryHelper.setLiveApiHistory(value);
                         tvApi.setText(value);
+                        refreshApiLineText();
                         dialog.dismiss();
+                        if (!oldApi.equals(value)) {
+                            restartAppAfterConfigChanged();
+                        }
                     }
 
                     @Override
@@ -334,6 +364,52 @@ public class ModelSettingFragment extends BaseLazyFragment {
                         Hawk.put(HawkConfig.API_HISTORY, data);
                     }
                 }, history, idx);
+                dialog.show();
+            }
+        });
+
+        findViewById(R.id.llApiLine).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                ArrayList<String> apiLines = Hawk.get(HawkConfig.API_LINE_LIST, new ArrayList<String>());
+                if (apiLines.isEmpty()) {
+                    Toast.makeText(mContext, "线路列表为空", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                String current = Hawk.get(HawkConfig.API_URL, "");
+                int idx = 0;
+                for (int i = 0; i < apiLines.size(); i++) {
+                    if (current.equals(HistoryHelper.getApiLineUrl(apiLines.get(i)))) {
+                        idx = i;
+                        break;
+                    }
+                }
+                SelectDialog<String> dialog = new SelectDialog<>(mActivity);
+                dialog.setTip("线路选择");
+                dialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<String>() {
+                    @Override
+                    public void click(String value, int pos) {
+                        String newApi = HistoryHelper.getApiLineUrl(value);
+                        String oldApi = Hawk.get(HawkConfig.API_URL, "");
+                        if (newApi.isEmpty()) {
+                            return;
+                        }
+                        Hawk.put(HawkConfig.API_URL, newApi);
+                        Hawk.put(HawkConfig.LIVE_API_URL, newApi);
+                        HistoryHelper.setLiveApiHistory(newApi);
+                        tvApi.setText(newApi);
+                        refreshApiLineText();
+                        dialog.dismiss();
+                        if (!oldApi.equals(newApi)) {
+                            restartAppAfterConfigChanged();
+                        }
+                    }
+
+                    @Override
+                    public String getDisplay(String val) {
+                        return HistoryHelper.getApiLineName(val);
+                    }
+                }, SelectDialogAdapter.stringDiff, apiLines, idx);
                 dialog.show();
             }
         });
@@ -628,8 +704,8 @@ public class ModelSettingFragment extends BaseLazyFragment {
             @Override
             public void onClick(View v) {
                 FastClickCheckUtil.check(v);
-                Hawk.put(HawkConfig.FAST_SEARCH_MODE, !Hawk.get(HawkConfig.FAST_SEARCH_MODE, false));
-                tvFastSearchText.setText(Hawk.get(HawkConfig.FAST_SEARCH_MODE, false) ? "开启" : "关闭");
+                Hawk.put(HawkConfig.FAST_SEARCH_MODE, !Hawk.get(HawkConfig.FAST_SEARCH_MODE, true));
+                tvFastSearchText.setText(Hawk.get(HawkConfig.FAST_SEARCH_MODE, true) ? "开启" : "关闭");
             }
         });
         findViewById(R.id.m3u8Ad).setOnClickListener(new View.OnClickListener() {
@@ -639,6 +715,15 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 boolean is_purify=Hawk.get(HawkConfig.M3U8_PURIFY, false);
                 Hawk.put(HawkConfig.M3U8_PURIFY, !is_purify);
                 tvm3u8AdText.setText(!is_purify ? "开启" : "关闭");
+            }
+        });
+        findViewById(R.id.autoSwitchLine).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                FastClickCheckUtil.check(v);
+                boolean enable = !Hawk.get(HawkConfig.AUTO_SWITCH_LINE, true);
+                Hawk.put(HawkConfig.AUTO_SWITCH_LINE, enable);
+                tvAutoSwitchLineText.setText(enable ? "开启" : "关闭");
             }
         });
         findViewById(R.id.llHomeRecStyle).setOnClickListener(new View.OnClickListener() {
@@ -719,6 +804,61 @@ public class ModelSettingFragment extends BaseLazyFragment {
 
         findViewById(R.id.llIjkCachePlay).setOnClickListener((view -> onClickIjkCachePlay(view)));
         findViewById(R.id.llClearCache).setOnClickListener((view -> onClickClearCache(view)));
+    }
+
+    private void restartAppAfterConfigChanged() {
+        Toast.makeText(mContext, "配置已切换,即将自动重启应用!", Toast.LENGTH_SHORT).show();
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                restartApp();
+            }
+        }, 2500);
+    }
+
+    private void refreshApiLineText() {
+        if (tvApiLine == null) return;
+        ArrayList<String> apiLines = Hawk.get(HawkConfig.API_LINE_LIST, new ArrayList<String>());
+        String current = Hawk.get(HawkConfig.API_URL, "");
+        boolean showLine = HistoryHelper.isApiLineUrl(current);
+        if (llApiLine != null) {
+            llApiLine.setVisibility(showLine ? View.VISIBLE : View.GONE);
+        }
+        updateApiRowWeight(showLine);
+        String lineName = "";
+        if (showLine) {
+            for (String apiLine : apiLines) {
+                if (current.equals(HistoryHelper.getApiLineUrl(apiLine))) {
+                    lineName = HistoryHelper.getApiLineName(apiLine);
+                    break;
+                }
+            }
+        }
+        tvApiLine.setText(lineName);
+    }
+
+    private void updateApiRowWeight(boolean showLine) {
+        if (llApi == null) return;
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) llApi.getLayoutParams();
+        params.weight = showLine ? 1.0f : 3.08f;
+        llApi.setLayoutParams(params);
+        if (llApiHistory != null) {
+            LinearLayout.LayoutParams historyParams = (LinearLayout.LayoutParams) llApiHistory.getLayoutParams();
+            int margin = showLine ? getResources().getDimensionPixelSize(R.dimen.vs_5) : 0;
+            historyParams.rightMargin = margin;
+            historyParams.setMarginEnd(margin);
+            llApiHistory.setLayoutParams(historyParams);
+        }
+    }
+
+    private void restartApp() {
+        if (mContext == null) return;
+        Intent intent = mContext.getPackageManager().getLaunchIntentForPackage(mContext.getPackageName());
+        if (intent != null) {
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(intent);
+            System.exit(0);
+        }
     }
 
     private void onClickIjkCachePlay(View v) {

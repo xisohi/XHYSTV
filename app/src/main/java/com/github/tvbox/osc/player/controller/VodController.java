@@ -74,6 +74,7 @@ import xyz.doikki.videoplayer.player.VideoView;
 
 import static xyz.doikki.videoplayer.util.PlayerUtils.stringForTime;
 import static xyz.doikki.videoplayer.util.PlayerUtils.seconds2Time;
+import static xyz.doikki.videoplayer.util.PlayerUtils.safeTimeMs;
 
 public class VodController extends BaseController {
     public VodController(@NonNull @NotNull Context context) {
@@ -336,7 +337,7 @@ public class VodController extends BaseController {
                 long duration = mControlWrapper.getDuration();
                 long newPosition = (duration * progress) / seekBar.getMax();
                 if (mCurrentTime != null)
-                    mCurrentTime.setText(stringForTime((int) newPosition));
+                    mCurrentTime.setText(stringForTime(safeTimeMs(newPosition)));
             }
 
             @Override
@@ -352,7 +353,7 @@ public class VodController extends BaseController {
                 myHandle.postDelayed(myRunnable, myHandleSeconds);
                 long duration = mControlWrapper.getDuration();
                 long newPosition = (duration * seekBar.getProgress()) / seekBar.getMax();
-                mControlWrapper.seekTo((int) newPosition);
+                mControlWrapper.seekTo(newPosition);
                 mIsDragging = false;
                 mControlWrapper.startProgress();
                 mControlWrapper.startFadeOut();
@@ -584,8 +585,8 @@ public class VodController extends BaseController {
                 myHandle.removeCallbacks(myRunnable);
                 myHandle.postDelayed(myRunnable, myHandleSeconds);
                 try {
-                    int current = (int) mControlWrapper.getCurrentPosition();
-                    int duration = (int) mControlWrapper.getDuration();
+                    int current = safeTimeMs(mControlWrapper.getCurrentPosition());
+                    int duration = safeTimeMs(mControlWrapper.getDuration());
                     if (current > duration / 2) return;
                     mPlayerConfig.put("st",current/1000);
                     updatePlayerCfgView();
@@ -614,8 +615,8 @@ public class VodController extends BaseController {
                 myHandle.removeCallbacks(myRunnable);
                 myHandle.postDelayed(myRunnable, myHandleSeconds);
                 try {
-                    int current = (int) mControlWrapper.getCurrentPosition();
-                    int duration = (int) mControlWrapper.getDuration();
+                    int current = safeTimeMs(mControlWrapper.getCurrentPosition());
+                    int duration = safeTimeMs(mControlWrapper.getDuration());
                     if (current < duration / 2) return;
                     mPlayerConfig.put("et", (duration - current)/1000);
                     updatePlayerCfgView();
@@ -874,7 +875,7 @@ public class VodController extends BaseController {
         simSlideOffset = 0;
     }
     public void tvSlideStart(int dir) {
-        int duration = (int) mControlWrapper.getDuration();
+        int duration = safeTimeMs(mControlWrapper.getDuration());
         if (duration <= 0)
             return;
 
@@ -894,7 +895,7 @@ public class VodController extends BaseController {
             }
         }
         lastSlideTime = currentTime;
-        int currentPosition = (int) mControlWrapper.getCurrentPosition();
+        int currentPosition = safeTimeMs(mControlWrapper.getCurrentPosition());
         int position = (int) (currentPosition + simSlideOffset);
         if (position > duration) position = duration;
         if (position < 0) position = 0;
@@ -1221,27 +1222,24 @@ public class VodController extends BaseController {
         }
     }
 
-    private static int switchPlayerCount=0;
     public boolean switchPlayer(){
         try {
             int playerType= mPlayerConfig.getInt("pl");
             int p_type = (playerType == 1) ? playerType + 1 : (playerType == 2) ? playerType - 1 : playerType;
             if (p_type != playerType) {
-                Toast.makeText(getContext(), "切换到"+(p_type==1?"IJK":"EXO")+"播放器重试", Toast.LENGTH_SHORT).show();
+                LOG.i("echo-switchPlayer: " + playerType + " -> " + p_type);
+                Toast.makeText(getContext(), "切换到"+(p_type==1?"IJK":"EXO"), Toast.LENGTH_SHORT).show();
                 mPlayerConfig.put("pl", p_type);
                 updatePlayerCfgView();
                 listener.updatePlayerCfg();
             }else {
+                LOG.i("echo-switchPlayer: skip unsupported playerType=" + playerType);
                 return true;
             }
         }catch (Exception e){
+            LOG.i("echo-switchPlayer error: " + e.getMessage());
             return true;
         }
-        if(switchPlayerCount==1) {
-            switchPlayerCount=0;
-            return true;
-        }
-        switchPlayerCount++;
         return false;
     }
 

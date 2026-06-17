@@ -55,12 +55,17 @@ public class PythonSpider extends Spider {
         File file = new File(path);
         if (file.exists()) {
             pySpider = app.callAttr("loadFromDisk", path);
+            try {
+                pySpider.put("siteKey", name);
+            } catch (Exception ignored) {
+            }
 
             List<PyObject> poList = app.callAttr("getDependence", pySpider).asList();
             for (PyObject po : poList) {
                 String api = po.toString();
                 Log.i("PyLoader", "echo-init api: " +api);
                 String depUrl = PythonLoader.getInstance().getUrlByApi(api);
+                if (depUrl.isEmpty()) depUrl = resolveDependenceUrl(url, api);
                 if (!depUrl.isEmpty()) {
                     Log.i("PyLoader", "echo-init depUrl: " +depUrl);
                     String tmpPath = app.callAttr("downloadPlugin", cachePath, depUrl).toString();
@@ -68,6 +73,7 @@ public class PythonSpider extends Spider {
                         PyToast.showCancelableToast(api + "加载失败!");
                         return;
                     } else {
+                        app.callAttr("registerPluginAlias", api, tmpPath);
                         PyLog.d(api + ": 加载插件依赖成功！");
                     }
                 }
@@ -79,6 +85,20 @@ public class PythonSpider extends Spider {
         } else {
             PyToast.showCancelableToast(name + "下载插件失败");
         }
+    }
+
+    private String resolveDependenceUrl(String baseUrl, String api) {
+        if (api == null || api.isEmpty()) return "";
+        String dep = api.endsWith(".py") ? api : api + ".py";
+        if (dep.startsWith("http://") || dep.startsWith("https://") || dep.startsWith("file://") || dep.startsWith("clan://")) {
+            return dep;
+        }
+        String cleanBase = baseUrl;
+        int queryIndex = cleanBase.indexOf('?');
+        if (queryIndex >= 0) cleanBase = cleanBase.substring(0, queryIndex);
+        int slashIndex = cleanBase.lastIndexOf('/');
+        if (slashIndex < 0) return dep;
+        return cleanBase.substring(0, slashIndex + 1) + dep;
     }
 
     public String getName() {
@@ -297,6 +317,14 @@ public class PythonSpider extends Spider {
      */
     public boolean manualVideoCheck() {
         return false;
+    }
+
+    @Override
+    public void destroy() {
+        try {
+            if (app != null && pySpider != null) app.callAttr("destroy", pySpider);
+        } catch (Exception ignored) {
+        }
     }
 
     public static byte[] decode(String s) {

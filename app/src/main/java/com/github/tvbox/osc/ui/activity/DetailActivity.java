@@ -4,8 +4,10 @@ import android.annotation.SuppressLint;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
+import android.graphics.Outline;
 import android.graphics.PointF;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.Html;
 import android.text.TextUtils;
@@ -13,6 +15,7 @@ import android.util.DisplayMetrics;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -71,9 +74,12 @@ import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import me.jessyan.autosize.utils.AutoSizeUtils;
 
@@ -154,6 +160,7 @@ public class DetailActivity extends BaseActivity {
         llPlayerPlace = findViewById(R.id.previewPlayerPlace);
         llPlayerFragmentContainer = findViewById(R.id.previewPlayer);
         llPlayerFragmentContainerBlock = findViewById(R.id.previewPlayerBlock);
+        applyPreviewRoundCorners();
         ivThumb = findViewById(R.id.ivThumb);
         llPlayerPlace.setVisibility(showPreview ? View.VISIBLE : View.GONE);
         ivThumb.setVisibility(!showPreview ? View.VISIBLE : View.GONE);
@@ -366,9 +373,17 @@ public class DetailActivity extends BaseActivity {
             private void refresh(View itemView, int position) {
                 String newFlag = seriesFlagAdapter.getData().get(position).name;
                 if (vodInfo != null && !vodInfo.playFlag.equals(newFlag)) {
+                    String oldFlag = vodInfo.playFlag;
+                    int oldIndex = Math.max(vodInfo.playIndex, 0);
+                    VodInfo.VodSeries currentSeries = null;
+                    List<VodInfo.VodSeries> oldSeriesList = vodInfo.seriesMap.get(oldFlag);
+                    if (oldSeriesList != null && !oldSeriesList.isEmpty()) {
+                        int safeOldIndex = Math.max(0, Math.min(oldIndex, oldSeriesList.size() - 1));
+                        currentSeries = oldSeriesList.get(safeOldIndex);
+                    }
                     for (int i = 0; i < vodInfo.seriesFlags.size(); i++) {
                         VodInfo.VodSeriesFlag flag = vodInfo.seriesFlags.get(i);
-                        if (flag.name.equals(vodInfo.playFlag)) {
+                        if (flag.name.equals(oldFlag)) {
                             flag.selected = false;
                             seriesFlagAdapter.notifyItemChanged(i);
                             break;
@@ -377,10 +392,18 @@ public class DetailActivity extends BaseActivity {
                     VodInfo.VodSeriesFlag flag = vodInfo.seriesFlags.get(position);
                     flag.selected = true;
                     // clean pre flag select status
-                    if (vodInfo.seriesMap.get(vodInfo.playFlag).size() > vodInfo.playIndex) {
-                        vodInfo.seriesMap.get(vodInfo.playFlag).get(vodInfo.playIndex).selected = false;
+                    if (oldSeriesList != null && oldSeriesList.size() > oldIndex) {
+                        oldSeriesList.get(oldIndex).selected = false;
                     }
                     vodInfo.playFlag = newFlag;
+                    List<VodInfo.VodSeries> newSeriesList = vodInfo.seriesMap.get(newFlag);
+                    if (newSeriesList != null && !newSeriesList.isEmpty()) {
+                        vodInfo.playIndex = findSameEpisodeIndex(currentSeries, newSeriesList, oldIndex);
+                        for (VodInfo.VodSeries series : newSeriesList) {
+                            series.selected = false;
+                        }
+                        newSeriesList.get(vodInfo.playIndex).selected = true;
+                    }
                     seriesFlagAdapter.notifyItemChanged(position);
                     refreshList();
                     mGridView.clearFocus();
@@ -667,6 +690,33 @@ public class DetailActivity extends BaseActivity {
         return info.replaceAll("\\<.*?\\>", "").replaceAll("\\s", "");
     }
 
+    private void applyPreviewRoundCorners() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return;
+        }
+        final float radius = getResources().getDimension(R.dimen.preview_player_radius);
+        ViewOutlineProvider provider = new ViewOutlineProvider() {
+            @Override
+            public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+            }
+        };
+        llPlayerFragmentContainer.setClipToOutline(true);
+        llPlayerFragmentContainer.setOutlineProvider(provider);
+        llPlayerFragmentContainerBlock.setClipToOutline(true);
+        llPlayerFragmentContainerBlock.setOutlineProvider(provider);
+    }
+
+    private void setPreviewRoundClip(boolean enable) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            return;
+        }
+        llPlayerFragmentContainer.setClipToOutline(enable);
+        llPlayerFragmentContainerBlock.setClipToOutline(enable);
+        llPlayerFragmentContainer.setBackgroundResource(enable ? R.drawable.preview_player_round : android.R.color.black);
+    }
+
+
     private void initViewModel() {
         sourceViewModel = new ViewModelProvider(this).get(SourceViewModel.class);
         sourceViewModel.detailResult.observe(this, new Observer<AbsXml>() {
@@ -822,7 +872,9 @@ public class DetailActivity extends BaseActivity {
     public void refresh(RefreshEvent event) {
         if (event.type == RefreshEvent.TYPE_REFRESH) {
             if (event.obj != null) {
-                if (event.obj instanceof Integer) {
+                if (event.obj instanceof VodInfo) {
+                    syncPlayingVodInfo((VodInfo) event.obj);
+                } else if (event.obj instanceof Integer) {
                     int index = (int) event.obj;
                     for (int j = 0; j < Objects.requireNonNull(vodInfo.seriesMap.get(vodInfo.playFlag)).size(); j++) {
                         seriesAdapter.getData().get(j).selected = false;
@@ -972,6 +1024,136 @@ public class DetailActivity extends BaseActivity {
         }
     }
 
+    private void syncPlayingVodInfo(VodInfo playingVodInfo) {
+        if (playingVodInfo == null || vodInfo == null || vodInfo.seriesMap == null) {
+            return;
+        }
+        String newFlag = playingVodInfo.playFlag;
+        if (TextUtils.isEmpty(newFlag) || !vodInfo.seriesMap.containsKey(newFlag)) {
+            return;
+        }
+        List<VodInfo.VodSeries> newSeriesList = vodInfo.seriesMap.get(newFlag);
+        if (newSeriesList == null || newSeriesList.isEmpty()) {
+            return;
+        }
+
+        VodInfo.VodSeries playingSeries = getPlayingSeries(playingVodInfo, newFlag);
+        int newIndex = findSameEpisodeIndex(playingSeries, newSeriesList, playingVodInfo.playIndex);
+        vodInfo.playFlag = newFlag;
+        vodInfo.playIndex = newIndex;
+        if (playingVodInfo.playerCfg != null) {
+            vodInfo.playerCfg = playingVodInfo.playerCfg;
+        }
+
+        for (VodInfo.VodSeriesFlag flag : vodInfo.seriesFlags) {
+            flag.selected = flag.name.equals(newFlag);
+        }
+        for (List<VodInfo.VodSeries> seriesList : vodInfo.seriesMap.values()) {
+            if (seriesList == null) {
+                continue;
+            }
+            for (VodInfo.VodSeries series : seriesList) {
+                series.selected = false;
+            }
+        }
+        newSeriesList.get(newIndex).selected = true;
+
+        seriesFlagAdapter.notifyDataSetChanged();
+        refreshList();
+        setTvPlayUrl(newSeriesList.get(newIndex).url);
+
+        int flagIndex = -1;
+        for (int i = 0; i < vodInfo.seriesFlags.size(); i++) {
+            if (vodInfo.seriesFlags.get(i).name.equals(newFlag)) {
+                flagIndex = i;
+                break;
+            }
+        }
+        if (flagIndex >= 0) {
+            mGridViewFlag.scrollToPosition(flagIndex);
+            if (mGridViewFlag.hasFocus()) {
+                mGridViewFlag.setSelection(flagIndex);
+            }
+        }
+        if (!isFirstLoad && mGridView.hasFocus()) {
+            mGridView.setSelection(newIndex);
+        }
+
+        insertVod(firstsourceKey, vodInfo);
+        isFirstLoad = false;
+    }
+
+    private VodInfo.VodSeries getPlayingSeries(VodInfo playingVodInfo, String flag) {
+        if (playingVodInfo == null || playingVodInfo.seriesMap == null || TextUtils.isEmpty(flag)) {
+            return null;
+        }
+        List<VodInfo.VodSeries> playingList = playingVodInfo.seriesMap.get(flag);
+        if (playingList == null || playingList.isEmpty()) {
+            return null;
+        }
+        int safeIndex = Math.max(0, Math.min(playingVodInfo.playIndex, playingList.size() - 1));
+        return playingList.get(safeIndex);
+    }
+
+    private int findSameEpisodeIndex(VodInfo.VodSeries currentSeries, List<VodInfo.VodSeries> targetList, int fallbackIndex) {
+        if (targetList == null || targetList.isEmpty()) {
+            return 0;
+        }
+        if (currentSeries != null && !TextUtils.isEmpty(currentSeries.name)) {
+            String currentName = normalizeEpisodeName(currentSeries.name);
+            for (int i = 0; i < targetList.size(); i++) {
+                VodInfo.VodSeries targetSeries = targetList.get(i);
+                if (targetSeries != null && currentName.equals(normalizeEpisodeName(targetSeries.name))) {
+                    return i;
+                }
+            }
+            int currentEpisode = extractEpisodeNumber(currentSeries.name);
+            if (currentEpisode >= 0) {
+                for (int i = 0; i < targetList.size(); i++) {
+                    VodInfo.VodSeries targetSeries = targetList.get(i);
+                    if (targetSeries != null && extractEpisodeNumber(targetSeries.name) == currentEpisode) {
+                        return i;
+                    }
+                }
+            }
+        }
+        return Math.max(0, Math.min(fallbackIndex, targetList.size() - 1));
+    }
+
+    private String normalizeEpisodeName(String name) {
+        if (name == null) {
+            return "";
+        }
+        return name.toLowerCase(Locale.ROOT)
+                .replaceAll("\\s+", "")
+                .replaceAll("[\\[\\]【】()（）]", "")
+                .replace("第", "")
+                .replace("集", "")
+                .replace("话", "")
+                .replace("期", "");
+    }
+
+    private int extractEpisodeNumber(String name) {
+        if (name == null) {
+            return -1;
+        }
+        Matcher episodeMatcher = Pattern.compile("(?:第)?(\\d+)(?:集|话|期|$)").matcher(name);
+        if (episodeMatcher.find()) {
+            try {
+                return Integer.parseInt(episodeMatcher.group(1));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        Matcher matcher = Pattern.compile("\\d+").matcher(name);
+        if (matcher.find()) {
+            try {
+                return Integer.parseInt(matcher.group());
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return -1;
+    }
+
     private void insertVod(String sourceKey, VodInfo vodInfo) {
         try {
             vodInfo.playNote = vodInfo.seriesMap.get(vodInfo.playFlag).get(vodInfo.playIndex).name;
@@ -1017,7 +1199,10 @@ public class DetailActivity extends BaseActivity {
                 return;
             }
         }
-        if(showPreview && playFragment!=null)playFragment.setPlayTitle(false);
+        if(showPreview && playFragment!=null){
+            playFragment.setPlayTitle(false);
+            playFragment.setExitingPreview(true);
+        }
         super.onBackPressed();
     }
 
@@ -1066,6 +1251,7 @@ public class DetailActivity extends BaseActivity {
         }
         fullWindows = !fullWindows;
         llPlayerFragmentContainer.setLayoutParams(fullWindows ? windowsFull : windowsPreview);
+        setPreviewRoundClip(!fullWindows);
         llPlayerFragmentContainerBlock.setVisibility(fullWindows ? View.GONE : View.VISIBLE);
         mGridView.setVisibility(fullWindows ? View.GONE : View.VISIBLE);
         mGridViewFlag.setVisibility(fullWindows ? View.GONE : View.VISIBLE);

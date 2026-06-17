@@ -48,6 +48,14 @@ public class PythonLoader {
         siteMap = new HashMap<>();
     }
 
+    public void clear() {
+        for (Spider spider : spiders.values()) {
+            spider.destroy();
+        }
+        spiders.clear();
+        siteMap.clear();
+    }
+
     public static PythonLoader getInstance() {
         if (sInstance == null) {
             synchronized (PyToast.class) {
@@ -69,6 +77,7 @@ public class PythonLoader {
 
     public void setConfig(String config) {
         try {
+            siteMap.clear();
             JSONObject configJo = new JSONObject(config);
             JSONArray siteList = configJo.getJSONArray("sites");
             for (int i = 0; i < siteList.length(); i++) {
@@ -142,8 +151,8 @@ public class PythonLoader {
                 }
             });
 
-            // 等待线程完成，最多10秒
-            future.get(10, TimeUnit.SECONDS);
+            // 等待线程完成，最多30秒
+            future.get(30, TimeUnit.SECONDS);
 
             // 任务成功，缓存并返回
             spiders.put(key, sp);

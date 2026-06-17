@@ -12,7 +12,7 @@ android {
         ndk {
             //abiFilters 'arm64-v8a'
             //noinspection ChromeOsAbiSupport
-            abiFilters "armeabi-v7a"
+            abiFilters "armeabi-v7a", "arm64-v8a"
         }
         python {
             buildPython("D:/Programs/Python/Python38/python.exe")
@@ -30,14 +30,18 @@ android {
     }
 
     buildTypes {
-        all {
+        debug {
             ndk {
                 //noinspection ChromeOsAbiSupport
-                abiFilters 'armeabi-v7a'
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
             }
         }
         release {
             minifyEnabled false
+            ndk {
+                //noinspection ChromeOsAbiSupport
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }

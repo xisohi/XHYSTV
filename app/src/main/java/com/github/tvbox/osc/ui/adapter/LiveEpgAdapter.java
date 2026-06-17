@@ -44,6 +44,9 @@ public class LiveEpgAdapter extends BaseQuickAdapter<Epginfo, BaseViewHolder> {
         TextView timeview = holder.getView(R.id.tv_epg_time);
         TextView shiyi = holder.getView(R.id.shiyi);
         AudioWaveView wqddg_AudioWaveView = holder.getView(R.id.wqddg_AudioWaveView);
+        holder.itemView.setSelected(value.index == selectedEpgIndex || value.index == focusedEpgIndex);
+        textview.setSelected(true);
+        timeview.setSelected(true);
         wqddg_AudioWaveView.setVisibility(View.GONE);
         if (value.index == selectedEpgIndex && value.index != focusedEpgIndex && (value.currentEpgDate.equals(shiyiDate) || value.currentEpgDate.equals(timeFormat.format(new Date())))) {
             textview.setTextColor(mContext.getResources().getColor(R.color.color_1890FF));
@@ -113,8 +116,14 @@ public class LiveEpgAdapter extends BaseQuickAdapter<Epginfo, BaseViewHolder> {
     }
 
     public void setSelectedEpgIndex(int selectedEpgIndex) {
-        if (selectedEpgIndex == this.selectedEpgIndex) return;
+        if (selectedEpgIndex == this.selectedEpgIndex) {
+            if (this.selectedEpgIndex != -1) notifyItemChanged(this.selectedEpgIndex);
+            return;
+        }
+        int preSelectedEpgIndex = this.selectedEpgIndex;
         this.selectedEpgIndex = selectedEpgIndex;
+        if (preSelectedEpgIndex != -1)
+            notifyItemChanged(preSelectedEpgIndex);
         if (this.selectedEpgIndex != -1)
             notifyItemChanged(this.selectedEpgIndex);
     }
@@ -126,7 +135,5 @@ public class LiveEpgAdapter extends BaseQuickAdapter<Epginfo, BaseViewHolder> {
 
     public void setFocusedEpgIndex(int focusedEpgIndex) {
         this.focusedEpgIndex = focusedEpgIndex;
-        if (this.focusedEpgIndex != -1)
-            notifyItemChanged(this.focusedEpgIndex);
     }
 }

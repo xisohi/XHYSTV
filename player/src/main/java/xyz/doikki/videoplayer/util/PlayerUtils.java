@@ -262,6 +262,9 @@ public final class PlayerUtils {
      * 格式化时间
      */
     public static String stringForTime(int timeMs) {
+        if (timeMs < 0) {
+            timeMs = 0;
+        }
         int totalSeconds = timeMs / 1000;
 
         int seconds = totalSeconds % 60;
@@ -279,11 +282,24 @@ public final class PlayerUtils {
      * 格式化时间2
      */
     public static String seconds2Time(int timeMs) {
+        if (timeMs < 0) {
+            timeMs = 0;
+        }
         int totalSeconds = timeMs / 1000;
 
         int seconds = totalSeconds % 60;
         int minutes = (totalSeconds / 60);
         return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
+    }
+
+    public static int safeTimeMs(long timeMs) {
+        if (timeMs <= 0) {
+            return 0;
+        }
+        if (timeMs > Integer.MAX_VALUE) {
+            return Integer.MAX_VALUE;
+        }
+        return (int) timeMs;
     }
 
     /**

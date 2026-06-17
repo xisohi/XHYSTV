@@ -27,7 +27,9 @@ public class LiveSettingItemAdapter extends BaseQuickAdapter<LiveSettingItem, Ba
     protected void convert(BaseViewHolder holder, LiveSettingItem item) {
         TextView tvItemName = holder.getView(R.id.tvSettingItemName);
         tvItemName.setText(item.getItemName());
+        tvItemName.setSelected(true);
         int itemIndex = item.getItemIndex();
+        holder.itemView.setSelected(item.isItemSelected());
         if (item.isItemSelected() && itemIndex != focusedItemIndex) {
             tvItemName.setTextColor(mContext.getResources().getColor(R.color.color_1890FF));
         } else {

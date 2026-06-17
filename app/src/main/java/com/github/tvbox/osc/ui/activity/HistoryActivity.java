@@ -132,7 +132,7 @@ public class HistoryActivity extends BaseActivity {
                             jumpActivity(DetailActivity.class, bundle);
                         }else {
                             bundle.putString("title", vodInfo.name);
-                            if(Hawk.get(HawkConfig.FAST_SEARCH_MODE, false)){
+                            if(Hawk.get(HawkConfig.FAST_SEARCH_MODE, true)){
                                 jumpActivity(FastSearchActivity.class, bundle);
                             }else {
                                 jumpActivity(SearchActivity.class, bundle);
