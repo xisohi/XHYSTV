@@ -41,7 +41,7 @@ android {
                 abiFilters 'armeabi-v7a'
             }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            buildConfigField "String", "FLAVOR", "\"java\""
+            buildConfigField "String", "FLAVOR", "\"java32\""
         }
         java64 {
             dimension "mode"
@@ -50,7 +50,7 @@ android {
                 abiFilters 'arm64-v8a'
             }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            buildConfigField "String", "FLAVOR", "\"java\""
+            buildConfigField "String", "FLAVOR", "\"java64\""
         }
         python {
             dimension "mode"
@@ -70,7 +70,7 @@ android {
                 abiFilters 'armeabi-v7a'
             }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-python.pro'
-            buildConfigField "String", "FLAVOR", "\"python\""
+            buildConfigField "String", "FLAVOR", "\"python32\""
         }
         python64 {
             dimension "mode"
@@ -79,7 +79,7 @@ android {
                 abiFilters 'arm64-v8a'
             }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-python.pro'
-            buildConfigField "String", "FLAVOR", "\"python\""
+            buildConfigField "String", "FLAVOR", "\"python64\""
         }
     }
 
