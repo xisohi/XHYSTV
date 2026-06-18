@@ -52,6 +52,7 @@ public class JarLoader {
         String jarKey = MD5.string2MD5(jarUrl);
         String jarMd5 = urls.length > 1 ? urls[1].trim() : "";
         loadJarInternal(jarUrl,jarMd5,jarKey);
+        recentJarKey = jarKey;
     }
 
     public void clear() {

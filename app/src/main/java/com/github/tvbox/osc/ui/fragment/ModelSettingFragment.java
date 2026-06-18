@@ -873,7 +873,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
         File cacheDir = new File(cachePath);
         String cspCachePath = FileUtils.getFilePath()+"/csp/";
         File cspCacheDir = new File(cspCachePath);
-        if (!cacheDir.exists() && !cspCacheDir.exists()) return;
+        ApiConfig.get().clearSpiderCache();
         new Thread(() -> {
             try {
                 if(cacheDir.exists())FileUtils.cleanDirectory(cacheDir);
@@ -884,7 +884,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 e.printStackTrace();
             }
         }).start();
-        Toast.makeText(getContext(), "播放&JAR缓存已清空", Toast.LENGTH_LONG).show();
+        Toast.makeText(getContext(), "播放&Spider缓存已清空", Toast.LENGTH_LONG).show();
     }
 
 

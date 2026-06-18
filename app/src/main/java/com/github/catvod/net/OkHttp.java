@@ -11,6 +11,7 @@ import okhttp3.Call;
 import okhttp3.FormBody;
 import okhttp3.Headers;
 import okhttp3.HttpUrl;
+import okhttp3.Interceptor;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.RequestBody;
@@ -19,6 +20,8 @@ import okhttp3.Response;
 public class OkHttp {
 
     private static final long TIMEOUT = TimeUnit.SECONDS.toMillis(30);
+    private static final String USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36";
+    private static final String ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/json;q=0.9";
     private static OkDns dns;
     private static OkHttpClient client;
 
@@ -30,8 +33,8 @@ public class OkHttp {
     public static synchronized OkHttpClient client() {
         if (client != null) return client;
         OkHttpClient base = OkGoHelper.getDefaultClient();
-        if (base != null) return client = base.newBuilder().dns(dns()).build();
-        return client = new OkHttpClient.Builder().dns(dns()).connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS).readTimeout(TIMEOUT, TimeUnit.MILLISECONDS).writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS).build();
+        if (base != null) return client = base.newBuilder().dns(dns()).addInterceptor(defaultHeaders()).build();
+        return client = new OkHttpClient.Builder().dns(dns()).addInterceptor(defaultHeaders()).connectTimeout(TIMEOUT, TimeUnit.MILLISECONDS).readTimeout(TIMEOUT, TimeUnit.MILLISECONDS).writeTimeout(TIMEOUT, TimeUnit.MILLISECONDS).build();
     }
 
     public static OkHttpClient player() {
@@ -49,7 +52,7 @@ public class OkHttp {
     public static OkHttpClient noRedirect(long timeout) {
         OkHttpClient base = OkGoHelper.getNoRedirectClient();
         if (base == null) base = client();
-        return base.newBuilder().dns(dns()).connectTimeout(timeout, TimeUnit.MILLISECONDS).readTimeout(timeout, TimeUnit.MILLISECONDS).writeTimeout(timeout, TimeUnit.MILLISECONDS).followRedirects(false).followSslRedirects(false).build();
+        return base.newBuilder().dns(dns()).addInterceptor(defaultHeaders()).connectTimeout(timeout, TimeUnit.MILLISECONDS).readTimeout(timeout, TimeUnit.MILLISECONDS).writeTimeout(timeout, TimeUnit.MILLISECONDS).followRedirects(false).followSslRedirects(false).build();
     }
 
     public static OkHttpClient client(boolean redirect, long timeout) {
@@ -138,6 +141,16 @@ public class OkHttp {
 
     private static Headers headers(Map<String, String> headers) {
         return headers == null ? new Headers.Builder().build() : Headers.of(headers);
+    }
+
+    private static Interceptor defaultHeaders() {
+        return chain -> {
+            Request request = chain.request();
+            Request.Builder builder = request.newBuilder();
+            if (request.header("User-Agent") == null) builder.header("User-Agent", USER_AGENT);
+            if (request.header("Accept") == null) builder.header("Accept", ACCEPT);
+            return chain.proceed(builder.build());
+        };
     }
 
     private static HttpUrl buildUrl(String url, ArrayMap<String, String> params) {

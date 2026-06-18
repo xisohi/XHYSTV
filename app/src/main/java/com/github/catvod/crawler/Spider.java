@@ -28,6 +28,9 @@ public class Spider {
         init(context);
     }
 
+    public void initApi(SpiderApi api) {
+    }
+
     /**
      * 首页数据内容
      *

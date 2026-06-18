@@ -75,6 +75,8 @@ public class ApiConfig {
     private Map<String,String> myHosts;
     private List<IJKCode> ijkCodes;
     private String spider = null;
+    private String currentPyKey = "";
+    private String currentLivePyKey = "";
     public String wallpaper = "";
 
     private final SourceBean emptyHome = new SourceBean();
@@ -925,6 +927,8 @@ public class ApiConfig {
     public void loadLiveApi(JsonObject livesOBJ) {
         try {
             LOG.i("echo-loadLiveApi");
+            currentLiveSpider = "";
+            currentLivePyKey = "";
             String lives = livesOBJ.toString();
             int index = lives.indexOf("proxy://");
             String url;
@@ -968,12 +972,20 @@ public class ApiConfig {
                                 ext=DefaultConfig.safeJsonString(livesOBJ, "ext", "");
                             }
 
-                            pyLoader.getSpider(MD5.string2MD5(pyApi),pyApi,ext);
+                            currentLivePyKey = MD5.string2MD5(pyApi);
+                            currentLiveSpider = pyApi;
+                            pyLoader.getSpider(currentLivePyKey,pyApi,ext);
                         }
                         if(!jarUrl.isEmpty()){
                             jarLoader.loadLiveJar(jarUrl);
+                            if (TextUtils.isEmpty(currentLiveSpider)) {
+                                currentLiveSpider = jarUrl;
+                            }
                         }else if(!liveSpider.isEmpty()){
                             jarLoader.loadLiveJar(liveSpider);
+                            if (TextUtils.isEmpty(currentLiveSpider)) {
+                                currentLiveSpider = liveSpider;
+                            }
                         }
                     }
                 }else {
@@ -1024,7 +1036,9 @@ public class ApiConfig {
     public void setLiveJar(String liveJar)
     {
         if(liveJar.contains(".py")){
-           pyLoader.setRecentPyKey(liveJar);
+            currentLivePyKey = MD5.string2MD5(liveJar);
+            pyLoader.getSpider(currentLivePyKey, liveJar, "");
+            pyLoader.setRecentPyKey(currentLivePyKey);
         }else {
             String jarUrl=!liveJar.isEmpty()?liveJar:liveSpider;
             jarLoader.setRecentJarKey(MD5.string2MD5(jarUrl));
@@ -1038,30 +1052,56 @@ public class ApiConfig {
 
     public Spider getCSP(SourceBean sourceBean) {
         if (sourceBean.getApi().endsWith(".js") || sourceBean.getApi().contains(".js?")){
+            currentPyKey = "";
             return jsLoader.getSpider(sourceBean.getKey(), sourceBean.getApi(), sourceBean.getExt(), sourceBean.getJar());
         }
         else if (sourceBean.getApi().contains(".py")) {
+            currentPyKey = sourceBean.getKey();
+            pyLoader.setRecentPyKey(currentPyKey);
             return pyLoader.getSpider(sourceBean.getKey(), sourceBean.getApi(), sourceBean.getExt());
         }
-        else return jarLoader.getSpider(sourceBean.getKey(), sourceBean.getApi(), sourceBean.getExt(), sourceBean.getJar());
+        else {
+            currentPyKey = "";
+            return jarLoader.getSpider(sourceBean.getKey(), sourceBean.getApi(), sourceBean.getExt(), sourceBean.getJar());
+        }
     }
 
     public Spider getPyCSP(String url) {
-        return pyLoader.getSpider(MD5.string2MD5(url), url, "");
+        currentLivePyKey = MD5.string2MD5(url);
+        currentLiveSpider = url;
+        return pyLoader.getSpider(currentLivePyKey, url, "");
     }
 
     public Object[] proxyLocal(Map<String, String> param) {
         if ("js".equals(param.get("do"))) {
             return jsLoader.proxyInvoke(param);
         }
-        String apiString;
         if (Hawk.get(HawkConfig.PLAYER_IS_LIVE, false)) {
-            apiString = currentLiveSpider!=null?currentLiveSpider:"";
-        } else {
-            SourceBean sourceBean = ApiConfig.get().getHomeSourceBean();
-            apiString = sourceBean.getApi();
+            String liveApi = currentLiveSpider != null ? currentLiveSpider : "";
+            if (liveApi.contains(".py")) {
+                return pyLoader.proxyInvoke(param, currentLivePyKey);
+            }
+            return jarLoader.proxyInvoke(param);
         }
-        return apiString.contains(".py") ? pyLoader.proxyInvoke(param) : jarLoader.proxyInvoke(param);
+        if ("py".equals(param.get("do"))) {
+            return pyLoader.proxyInvoke(param, getCurrentPyKey());
+        }
+        SourceBean sourceBean = ApiConfig.get().getHomeSourceBean();
+        String apiString = sourceBean.getApi();
+        return apiString.contains(".py") ? pyLoader.proxyInvoke(param, getCurrentPyKey()) : jarLoader.proxyInvoke(param);
+    }
+
+    private String getCurrentPyKey() {
+        if (!TextUtils.isEmpty(currentPyKey)) {
+            return currentPyKey;
+        }
+        SourceBean sourceBean = ApiConfig.get().getHomeSourceBean();
+        if (sourceBean.getApi().contains(".py")) {
+            currentPyKey = sourceBean.getKey();
+            pyLoader.getSpider(currentPyKey, sourceBean.getApi(), sourceBean.getExt());
+            pyLoader.setRecentPyKey(currentPyKey);
+        }
+        return currentPyKey;
     }
 
     public JSONObject jsonExt(String key, LinkedHashMap<String, String> jxs, String url) {
@@ -1223,5 +1263,12 @@ public class ApiConfig {
         jarLoader.clear();
         pyLoader.clear();
         jsLoader.clear();
+    }
+
+    public void clearSpiderCache() {
+        currentPyKey = "";
+        currentLivePyKey = "";
+        currentLiveSpider = "";
+        clearLoader();
     }
 }

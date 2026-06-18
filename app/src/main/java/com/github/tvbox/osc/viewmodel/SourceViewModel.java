@@ -148,8 +148,7 @@ public class SourceViewModel extends ViewModel {
                         @Override
                         public String call() throws Exception {
                             Spider sp = ApiConfig.get().getCSP(sourceBean);
-                            String json=sp.homeContent(true);
-                            return json;
+                            return sp.homeContent(true);
                         }
                     });
                     String sortJson = null;
@@ -1072,6 +1071,9 @@ public class SourceViewModel extends ViewModel {
 
     private AbsSortXml sortJson(MutableLiveData<AbsSortXml> result, String json) {
         try {
+            if (TextUtils.isEmpty(json)) {
+                return new AbsSortJson().toAbsSortXml();
+            }
             JsonObject obj = JsonParser.parseString(json).getAsJsonObject();
             AbsSortJson sortJson = gson.fromJson(obj, new TypeToken<AbsSortJson>() {
             }.getType());
