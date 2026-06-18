@@ -65,19 +65,19 @@ public class App extends MultiDexApplication {
         // Hawk
         Hawk.init(this).build();
         Hawk.put(HawkConfig.DEBUG_OPEN, false);
+        //播放器：0 系统 1 ijk 2 exo 10 MXPlayer
         if (!Hawk.contains(HawkConfig.PLAY_TYPE)) {
-            Hawk.put(HawkConfig.PLAY_TYPE, 1);
+            Hawk.put(HawkConfig.PLAY_TYPE, 2);
         }
-        //自定义默认配置，首页推荐，硬解，安全dns，缩略图
+        //首页推荐：0 豆瓣热播 1 数据源推荐 2 观看历史
         if (!Hawk.contains(HawkConfig.HOME_REC)) {
             Hawk.put(HawkConfig.HOME_REC, 2);
         }
+        //ijk解码：硬解码 软解码
         if (!Hawk.contains(HawkConfig.IJK_CODEC)) {
             Hawk.put(HawkConfig.IJK_CODEC, "硬解码");
         }
-        if (!Hawk.contains(HawkConfig.DOH_URL)) {
-            Hawk.put(HawkConfig.DOH_URL, 2);
-        }
+        //搜索展示：0 列表 1 缩略图
         if (!Hawk.contains(HawkConfig.SEARCH_VIEW)) {
             Hawk.put(HawkConfig.SEARCH_VIEW, 2);
         }
