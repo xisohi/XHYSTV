@@ -42,6 +42,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import com.github.catvod.crawler.Spider;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
+import com.github.tvbox.osc.api.DanmakuApi;
 import com.github.tvbox.osc.base.App;
 import com.github.tvbox.osc.base.BaseActivity;
 import com.github.tvbox.osc.bean.ParseBean;
@@ -247,6 +248,7 @@ public class PlayActivity extends BaseActivity {
     }
 
     private void resetDanmuState() {
+        DanmakuApi.cancel();
         danmuText = "";
         danmuLoadSeq.incrementAndGet();
         if (mController != null) mController.setHasDanmu(false);
@@ -859,12 +861,26 @@ public class PlayActivity extends BaseActivity {
                             playUrl(playUrl + url, headers);
                         }
                         checkDanmu(danmaku);
+                        searchDanmu(danmaku);
                     } catch (Throwable th) {
                     }
                 } else {
 //                    setTip("获取播放信息错误", false, true);
                     errorWithRetry("获取播放信息错误", true);
                 }
+            }
+        });
+    }
+
+    private void searchDanmu(String danmaku) {
+        if (!TextUtils.isEmpty(danmaku) || !DanmakuApi.canSearch() || mVodInfo == null) return;
+        VodInfo.VodSeries series = getCurrentSeries(mVodInfo.playFlag, mVodInfo.playIndex);
+        String key = progressKey;
+        DanmakuApi.search(mVodInfo.name, series == null ? "" : series.name, new DanmakuApi.SearchCallback() {
+            @Override
+            public void onFound(String url) {
+                if (!TextUtils.equals(key, progressKey)) return;
+                checkDanmu(url);
             }
         });
     }

@@ -42,6 +42,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import com.github.catvod.crawler.Spider;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
+import com.github.tvbox.osc.api.DanmakuApi;
 import com.github.tvbox.osc.base.App;
 import com.github.tvbox.osc.base.BaseLazyFragment;
 import com.github.tvbox.osc.bean.ParseBean;
@@ -257,6 +258,7 @@ public class PlayFragment extends BaseLazyFragment {
     }
 
     private void resetDanmuState() {
+        DanmakuApi.cancel();
         danmuText = "";
         danmuLoadSeq.incrementAndGet();
         if (mController != null) mController.setHasDanmu(false);
@@ -331,8 +333,8 @@ public class PlayFragment extends BaseLazyFragment {
             @Override
             public void saveProgress(String url, long progress) {
                 CacheManager.save(MD5.string2MD5(url), progress);
-                if (progress > 0 && webPlayUrl != null) {
-                    cancelPlayTimeout();
+                if (webPlayUrl != null && isPlaybackStarted()) {
+                    markPlaybackStarted();
                     hideTipOnUiThread();
                 }
             }
@@ -346,8 +348,8 @@ public class PlayFragment extends BaseLazyFragment {
         mVideoView.addOnStateChangeListener(new VideoView.SimpleOnStateChangeListener() {
             @Override
             public void onPlayStateChanged(int playState) {
-                if (webPlayUrl != null && (playState == VideoView.STATE_PREPARED || playState == VideoView.STATE_BUFFERED || playState == VideoView.STATE_PLAYING)) {
-                    cancelPlayTimeout();
+                if (webPlayUrl != null && hasPlaybackProgress(mVideoView.getCurrentPosition())) {
+                    markPlaybackStarted();
                     hideTipOnUiThread();
                 }
             }
@@ -398,7 +400,6 @@ public class PlayFragment extends BaseLazyFragment {
                         stopParse();
                         initParseLoadFound();
                         if(mVideoView!=null) mVideoView.release();
-                        startSwitchLinePlayTimeout();
                         goPlayUrl(webPlayUrl,webHeaderMap);
                     }else {
                         play(false);
@@ -685,16 +686,16 @@ public class PlayFragment extends BaseLazyFragment {
     }
 
     void errorWithRetry(String err, boolean finish) {
+        if (isPlaybackStarted()) {
+            cancelPlayTimeout();
+            hideTipOnUiThread();
+            return;
+        }
         if (!autoRetry()) {
             if (!isAdded()) return;
             requireActivity().runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    if ("播放超时".equals(err) && isPlaybackStarted()) {
-                        cancelPlayTimeout();
-                        hideTip();
-                        return;
-                    }
                     if (finish) {
                         setTip(err, false, true);
                         Toast.makeText(mContext, err, Toast.LENGTH_SHORT).show();
@@ -754,6 +755,7 @@ public class PlayFragment extends BaseLazyFragment {
                             e.printStackTrace();
                         }
                         hideTip();
+                        playTimeoutBasePosition = getSavedProgress(progressKey);
                         if (url.startsWith("data:application/dash+xml;base64,")) {
                             PlayerHelper.updateCfg(mVideoView, mVodPlayerCfg, 2);
                             App.getInstance().setDashData(url.split("base64,")[1]);
@@ -769,6 +771,7 @@ public class PlayFragment extends BaseLazyFragment {
                         } else {
                             mVideoView.setUrl(url);
                         }
+                        startSwitchLinePlayTimeout();
                         mVideoView.start();
                         mController.resetSpeed();
                     }
@@ -922,6 +925,7 @@ public class PlayFragment extends BaseLazyFragment {
                             playUrl(playUrl + url, headers);
                         }
                         checkDanmu(danmaku);
+                        searchDanmu(danmaku);
                     } catch (Throwable th) {
                         handleResolvePlayUrlFailed("获取播放信息错误", true);
                     }
@@ -929,6 +933,19 @@ public class PlayFragment extends BaseLazyFragment {
 //                    获取播放信息错误后只需再重试一次
                     handleResolvePlayUrlFailed("获取播放信息错误", true);
                 }
+            }
+        });
+    }
+
+    private void searchDanmu(String danmaku) {
+        if (!TextUtils.isEmpty(danmaku) || !DanmakuApi.canSearch() || mVodInfo == null) return;
+        VodInfo.VodSeries series = getCurrentSeries(mVodInfo.playFlag, mVodInfo.playIndex);
+        String key = progressKey;
+        DanmakuApi.search(mVodInfo.name, series == null ? "" : series.name, new DanmakuApi.SearchCallback() {
+            @Override
+            public void onFound(String url) {
+                if (!TextUtils.equals(key, progressKey)) return;
+                checkDanmu(url);
             }
         });
     }
@@ -1134,6 +1151,9 @@ public class PlayFragment extends BaseLazyFragment {
 
     private boolean allowSwitchPlayer = true;
     private boolean hasAutoSwitchedPlayer = false;
+    private boolean allowAutoSwitchLine = true;
+    private boolean playbackStarted = false;
+    private long playTimeoutBasePosition = 0;
     private java.util.Set<String> triedLineFlags = new java.util.HashSet<>();  // 记录已尝试过的线路
     boolean autoRetry() {
         long currentTime = System.currentTimeMillis();
@@ -1158,7 +1178,6 @@ public class PlayFragment extends BaseLazyFragment {
                 allowSwitchPlayer = false;
                 if (!switchSkipped) {
                     stopParse();
-                    startSwitchLinePlayTimeout();
                     initParseLoadFound();
                     if(mVideoView!=null) mVideoView.release();
                     playUrl(webPlayUrl, webHeaderMap);
@@ -1172,7 +1191,7 @@ public class PlayFragment extends BaseLazyFragment {
     }
 
     boolean tryNextLineIfEnabled() {
-        if (Hawk.get(HawkConfig.AUTO_SWITCH_LINE, true)) return tryNextLine();
+        if (allowAutoSwitchLine && Hawk.get(HawkConfig.AUTO_SWITCH_LINE, true)) return tryNextLine();
         LOG.i("echo-autoRetry line switching disabled");
         autoRetryCount = 0;
         allowSwitchPlayer = true;
@@ -1374,6 +1393,8 @@ public class PlayFragment extends BaseLazyFragment {
         mController.setTitle(playTitleInfo);
 
         stopParse();
+        playbackStarted = false;
+        playTimeoutBasePosition = 0;
         webPlayUrl = null;
         webHeaderMap = null;
         initParseLoadFound();
@@ -1512,7 +1533,12 @@ public class PlayFragment extends BaseLazyFragment {
     }
 
     void startSwitchLinePlayTimeout() {
+        if (!allowAutoSwitchLine) {
+            cancelPlayTimeout();
+            return;
+        }
         cancelPlayTimeout();
+        LOG.i("echo-switchLinePlay start timeout");
         mHandler.sendEmptyMessageDelayed(MSG_SWITCH_LINE_PLAY_TIMEOUT, SWITCH_LINE_PLAY_TIMEOUT_MS);
     }
 
@@ -1525,11 +1551,27 @@ public class PlayFragment extends BaseLazyFragment {
         mHandler.removeMessages(MSG_SWITCH_LINE_PLAY_TIMEOUT);
     }
 
+    public void setAutoSwitchLineEnabled(boolean enabled) {
+        allowAutoSwitchLine = enabled;
+        if (!enabled) {
+            cancelPlayTimeout();
+            triedLineFlags.clear();
+        }
+    }
+
+    void markPlaybackStarted() {
+        playbackStarted = true;
+        cancelPlayTimeout();
+    }
+
     boolean isPlaybackStarted() {
+        if (playbackStarted) return true;
         if (mVideoView == null) return false;
-        int state = mVideoView.getCurrentPlayState();
-        if (state == VideoView.STATE_PLAYING || state == VideoView.STATE_BUFFERED || state == VideoView.STATE_PREPARED) return true;
-        return mVideoView.getCurrentPosition() > 0 || mVideoView.isPlaying();
+        return hasPlaybackProgress(mVideoView.getCurrentPosition());
+    }
+
+    boolean hasPlaybackProgress(long progress) {
+        return progress > Math.max(playTimeoutBasePosition, 0) + 1000;
     }
 
     void handleResolvePlayUrlTimeout() {
@@ -1553,6 +1595,8 @@ public class PlayFragment extends BaseLazyFragment {
     }
 
     void handleSwitchLinePlayTimeout() {
+        int state = mVideoView == null ? -1 : mVideoView.getCurrentPlayState();
+        LOG.i("echo-switchLinePlay timeout state: " + state + ", started: " + playbackStarted);
         if (isPlaybackStarted()) {
             cancelPlayTimeout();
             hideTipOnUiThread();
@@ -1560,7 +1604,11 @@ public class PlayFragment extends BaseLazyFragment {
         }
         LOG.i("echo-switchLinePlay timeout, try next line");
         stopParse();
-        if (!tryNextLineIfEnabled()) setTip("播放超时", false, true);
+        if (hasAutoSwitchedPlayer) {
+            if (!tryNextLineIfEnabled()) setTip("播放超时", false, true);
+            return;
+        }
+        if (!autoRetry()) setTip("播放超时", false, true);
     }
 
     void stopParse() {

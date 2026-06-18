@@ -69,6 +69,16 @@ public class OkHttp {
         }
     }
 
+    public static String string(String url, long timeout) {
+        if (url == null || !url.startsWith("http")) return "";
+        try (Response res = newCall(client(timeout), url).execute()) {
+            return res.body() != null ? res.body().string() : "";
+        } catch (Exception e) {
+            e.printStackTrace();
+            return "";
+        }
+    }
+
     public static String string(String url, Map<String, String> headers) {
         if (url == null || !url.startsWith("http")) return "";
         try (Response res = newCall(url, headers).execute()) {

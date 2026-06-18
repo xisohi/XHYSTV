@@ -78,6 +78,7 @@ public class ApiConfig {
     private String currentPyKey = "";
     private String currentLivePyKey = "";
     public String wallpaper = "";
+    private String danmaku = "";
 
     private final SourceBean emptyHome = new SourceBean();
 
@@ -538,6 +539,7 @@ public class ApiConfig {
         // spider
         spider = DefaultConfig.safeJsonString(infoJson, "spider", "");
         jarCache = DefaultConfig.safeJsonString(infoJson, "jarCache", "true");
+        danmaku = DefaultConfig.safeJsonString(infoJson, "danmaku", "");
         // wallpaper
         wallpaper = DefaultConfig.safeJsonString(infoJson, "wallpaper", "");
         // 远端站点源
@@ -1048,6 +1050,10 @@ public class ApiConfig {
 
     public String getSpider() {
         return spider;
+    }
+
+    public String getDanmaku() {
+        return danmaku == null ? "" : danmaku;
     }
 
     public Spider getCSP(SourceBean sourceBean) {

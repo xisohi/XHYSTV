@@ -30,7 +30,7 @@ public class M3u8 {
     private static final Pattern REGEX_X_DISCONTINUITY = Pattern.compile("#EXT-X-DISCONTINUITY[\\s\\S]*?(?=#EXT-X-DISCONTINUITY|$)");
     private static final Pattern REGEX_MEDIA_DURATION = Pattern.compile(TAG_MEDIA_DURATION + ":([\\d\\.]+)\\b");
     private static final Pattern REGEX_URI = Pattern.compile("URI=\"(.+?)\"");
-    private static final Pattern REGEX_AD_SEGMENT_URI = Pattern.compile("(?i)(^|[/?&=_.-])(ad|ads|advert|advertise|advertisement|commercial|preroll|pre-roll|midroll|mid-roll|postroll|post-roll|sponsor|scte|vast|vmap)([/?&=_.-]|$)");
+    private static final Pattern REGEX_AD_SEGMENT_URI = Pattern.compile("(?i)(^|[/?&=_.-])(ads|advert|advertise|advertisement|commercial|preroll|pre-roll|midroll|mid-roll|postroll|post-roll|sponsor|scte|vast|vmap)([/?&=_.-]|$)");
     public static int currentAdCount;
 
     public static boolean isAd(String regex) {
@@ -38,6 +38,7 @@ public class M3u8 {
     }
 
     public static String purify(String tsUrlPre, String m3u8content) {
+//        LOG.i("echo-fixAdM3u8Ai m3u8content: " + m3u8content + "");
         long start = System.currentTimeMillis();
         currentAdCount = 0;
         if (null == m3u8content || m3u8content.length() == 0) return null;

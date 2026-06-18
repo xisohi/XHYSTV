@@ -28,9 +28,11 @@ import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
 import com.github.tvbox.osc.ui.dialog.ApiDialog;
 import com.github.tvbox.osc.ui.dialog.ApiHistoryDialog;
 import com.github.tvbox.osc.ui.dialog.BackupDialog;
+import com.github.tvbox.osc.ui.dialog.DanmuApiDialog;
 import com.github.tvbox.osc.ui.dialog.SearchRemoteTvDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.XWalkInitDialog;
+import com.github.tvbox.osc.util.DanmuHelper;
 import com.github.tvbox.osc.util.FastClickCheckUtil;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
@@ -82,6 +84,8 @@ public class ModelSettingFragment extends BaseLazyFragment {
     private TextView tvRecStyleText;
     private TextView tvIjkCachePlay;
     private TextView tvHomeDefaultShow;
+    private TextView tvDanmuOpenText;
+    private TextView tvDanmuApiText;
 
     public static ModelSettingFragment newInstance() {
         return new ModelSettingFragment().setArguments();
@@ -102,6 +106,10 @@ public class ModelSettingFragment extends BaseLazyFragment {
         tvFastSearchText.setText(Hawk.get(HawkConfig.FAST_SEARCH_MODE, true) ? "开启" : "关闭");
         tvm3u8AdText = findViewById(R.id.m3u8AdText);
         tvm3u8AdText.setText(Hawk.get(HawkConfig.M3U8_PURIFY, false) ? "开启" : "关闭");
+        tvDanmuOpenText = findViewById(R.id.danmuOpenText);
+        tvDanmuOpenText.setText(DanmuHelper.isOpen() ? "开启" : "关闭");
+        tvDanmuApiText = findViewById(R.id.danmuApiText);
+        refreshDanmuApiText();
         tvAutoSwitchLineText = findViewById(R.id.autoSwitchLineText);
         tvAutoSwitchLineText.setText(Hawk.get(HawkConfig.AUTO_SWITCH_LINE, true) ? "开启" : "关闭");
         tvRecStyleText = findViewById(R.id.showRecStyleText);
@@ -235,7 +243,7 @@ public class ModelSettingFragment extends BaseLazyFragment {
                             tvHomeApi.setText(ApiConfig.get().getHomeSourceBean().getName());
 
                             Intent intent =new Intent(mContext, HomeActivity.class);
-                            intent.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK);
+                            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                             Bundle bundle = new Bundle();
                             bundle.putBoolean("useCache", true);
                             intent.putExtras(bundle);
@@ -717,6 +725,29 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 tvm3u8AdText.setText(!is_purify ? "开启" : "关闭");
             }
         });
+        findViewById(R.id.danmuOpen).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                FastClickCheckUtil.check(v);
+                boolean open = !DanmuHelper.isOpen();
+                DanmuHelper.setOpen(open);
+                tvDanmuOpenText.setText(open ? "开启" : "关闭");
+            }
+        });
+        findViewById(R.id.danmuApi).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                FastClickCheckUtil.check(v);
+                DanmuApiDialog dialog = new DanmuApiDialog(mActivity);
+                dialog.setOnListener(new DanmuApiDialog.OnListener() {
+                    @Override
+                    public void onChange(String api) {
+                        refreshDanmuApiText();
+                    }
+                });
+                dialog.show();
+            }
+        });
         findViewById(R.id.autoSwitchLine).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -835,6 +866,12 @@ public class ModelSettingFragment extends BaseLazyFragment {
             }
         }
         tvApiLine.setText(lineName);
+    }
+
+    private void refreshDanmuApiText() {
+        if (tvDanmuApiText == null) return;
+        String api = Hawk.get(HawkConfig.DANMU_API, "");
+        tvDanmuApiText.setText(api.isEmpty() ? "默认" : api);
     }
 
     private void updateApiRowWeight(boolean showLine) {
