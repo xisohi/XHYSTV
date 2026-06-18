@@ -141,10 +141,14 @@ public class Updater implements Download.Callback {
 
         TextView tvVersion = view.findViewById(R.id.version);
         TextView tvDesc = view.findViewById(R.id.desc);
+        TextView tvFlavor = view.findViewById(R.id.flavorType);
         TextView btnConfirm = view.findViewById(R.id.confirm);
         TextView btnCancel = view.findViewById(R.id.cancel);
 
         tvVersion.setText(activity.getString(R.string.update_version, version));
+        String flavor = BuildConfig.FLAVOR;
+        String flavorDisplay = getFlavorDisplayName(flavor);
+        tvFlavor.setText(flavorDisplay);
         tvDesc.setText(desc);
 
         // TV 焦点设置
@@ -400,6 +404,27 @@ public class Updater implements Download.Callback {
     private void showToast(String msg) {
         if (activity != null && !activity.isFinishing()) {
             Toast.makeText(activity, msg, Toast.LENGTH_LONG).show();
+        }
+    }
+    /**
+     * 获取风味的显示名称
+     */
+    private String getFlavorDisplayName(String flavor) {
+        switch (flavor) {
+            case "java":
+                return "Java通用版";
+            case "java32":
+                return "Java 32位版";
+            case "java64":
+                return "Java 64位版";
+            case "python":
+                return "Python通用版";
+            case "python32":
+                return "Python 32位版";
+            case "python64":
+                return "Python 64位版";
+            default:
+                return flavor;
         }
     }
 }
