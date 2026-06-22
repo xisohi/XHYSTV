@@ -5,6 +5,7 @@ import android.content.Context;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -145,12 +146,12 @@ public class ApiDialog extends BaseDialog {
                 }
             }
         });
-        initInputFocus();
         inputApi.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (isEditorConfirm(actionId, event) || actionId == EditorInfo.IME_ACTION_NEXT) {
-                    focusInput(inputApiLive);
+                if (actionId == EditorInfo.IME_ACTION_NEXT || isSoftKeyboardEnter(actionId, event)) {
+                    inputApiLive.requestFocus();
+                    inputApiLive.setSelection(inputApiLive.getText() == null ? 0 : inputApiLive.getText().length());
                     return true;
                 }
                 return false;
@@ -159,8 +160,8 @@ public class ApiDialog extends BaseDialog {
         inputApiLive.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (isEditorConfirm(actionId, event)) {
-                    inputConfirm.requestFocus();
+                if (actionId == EditorInfo.IME_ACTION_DONE || isSoftKeyboardEnter(actionId, event)) {
+                    focusConfirm();
                     return true;
                 }
                 return false;
@@ -169,35 +170,18 @@ public class ApiDialog extends BaseDialog {
         refreshQRCode();
     }
 
-    private void initInputFocus() {
-        inputApi.setCursorVisible(false);
-        inputApiLive.setCursorVisible(false);
-        View.OnFocusChangeListener listener = new View.OnFocusChangeListener() {
-            @Override
-            public void onFocusChange(View v, boolean hasFocus) {
-                if (v instanceof EditText) {
-                    ((EditText) v).setCursorVisible(hasFocus);
-                    if (hasFocus) moveCursorToEnd((EditText) v);
-                }
-            }
-        };
-        inputApi.setOnFocusChangeListener(listener);
-        inputApiLive.setOnFocusChangeListener(listener);
+    private boolean isSoftKeyboardEnter(int actionId, KeyEvent event) {
+        return actionId == EditorInfo.IME_NULL
+                && event != null
+                && event.getAction() == KeyEvent.ACTION_UP
+                && event.getKeyCode() == KeyEvent.KEYCODE_ENTER;
     }
 
-    private boolean isEditorConfirm(int actionId, KeyEvent event) {
-        if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_SEARCH) return true;
-        return event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_UP;
-    }
-
-    private void focusInput(EditText input) {
-        input.requestFocus();
-        input.setCursorVisible(true);
-        moveCursorToEnd(input);
-    }
-
-    private void moveCursorToEnd(EditText input) {
-        input.setSelection(input.getText() == null ? 0 : input.getText().length());
+    private void focusConfirm() {
+        InputMethodManager imm = (InputMethodManager) inputApiLive.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(inputApiLive.getWindowToken(), 0);
+        inputApiLive.clearFocus();
+        inputConfirm.requestFocus();
     }
 
     private void refreshQRCode() {

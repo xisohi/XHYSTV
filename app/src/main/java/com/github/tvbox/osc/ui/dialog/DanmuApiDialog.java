@@ -42,7 +42,7 @@ public class DanmuApiDialog extends BaseDialog {
 
     private String getDefaultApi() {
         String api = ApiConfig.get().getDanmaku();
-        return api.isEmpty() ? "请输入弹幕地址" : api;
+        return api.isEmpty() ? "请输入弹幕搜索地址" : api;
     }
 
     private void save(String api) {

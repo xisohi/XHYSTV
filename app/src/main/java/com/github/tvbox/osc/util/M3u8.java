@@ -23,6 +23,7 @@ public class M3u8 {
     private static final String TAG_MEDIA_DURATION = "#EXTINF";
     private static final String TAG_ENDLIST = "#EXT-X-ENDLIST";
     private static final String TAG_KEY = "#EXT-X-KEY";
+    private static final String TAG_MAP = "#EXT-X-MAP";
     private static final String TAG_CUE_OUT = "#EXT-X-CUE-OUT";
     private static final String TAG_CUE_IN = "#EXT-X-CUE-IN";
     private static final String TAG_DATERANGE = "#EXT-X-DATERANGE";
@@ -66,6 +67,7 @@ public class M3u8 {
         String result = removeMinorityUrl(tsUrlPre, m3u8content);
         if (result != null && currentAdCount > 0) result = get(tsUrlPre, result);
         else result = get(tsUrlPre, m3u8content);
+        result = keepVodEndList(m3u8content, result);
 
         // Final safety check: if too many segments removed, return original content
         if (totalSegments > 0 && currentAdCount > totalSegments * 0.5) {
@@ -194,7 +196,7 @@ public class M3u8 {
                 continue;
             }
             if (item.charAt(0) == '#') {
-                String output = item.startsWith(TAG_KEY) ? resolveKeyLine(tsUrlPre, lines[i]) : lines[i];
+                String output = hasUriAttribute(item) ? resolveUriLine(tsUrlPre, lines[i]) : lines[i];
                 if (isSegmentTag(item)) pendingSegmentTags.add(output);
                 else {
                     flush(filtered, pendingSegmentTags, linesplit);
@@ -496,7 +498,11 @@ public class M3u8 {
         return domain.equals(maxTimesPreUrl) || (cnt != null && cnt > timesNoAd);
     }
 
-    private static String resolveKeyLine(String base, String line) {
+    private static boolean hasUriAttribute(String line) {
+        return line.startsWith(TAG_KEY) || line.startsWith(TAG_MAP);
+    }
+
+    private static String resolveUriLine(String base, String line) {
         Matcher matcher = REGEX_URI.matcher(line);
         String value = matcher.find() ? matcher.group(1) : null;
         return value == null ? line : line.replace(value, UriUtil.resolve(base, value));
@@ -546,6 +552,20 @@ public class M3u8 {
             }
         }
         return mediaCount > 0 && !pendingExtInf;
+    }
+
+    private static String keepVodEndList(String original, String result) {
+        if (result == null) return null;
+        if (!hasEndList(original) || hasEndList(result)) return result;
+        return result + (result.endsWith("\n") ? "" : "\n") + TAG_ENDLIST + "\n";
+    }
+
+    private static boolean hasEndList(String content) {
+        if (content == null) return false;
+        for (String raw : content.replaceAll("\r\n", "\n").split("\n")) {
+            if (raw.trim().startsWith(TAG_ENDLIST)) return true;
+        }
+        return false;
     }
 
     private static boolean isMediaUriLine(String line) {
@@ -670,14 +690,12 @@ public class M3u8 {
     private static boolean shouldResolve(String line) {
         String item = line.trim();
         if (item.length() == 0) return false;
-        return (!item.startsWith("#") && !item.startsWith("http")) || item.startsWith(TAG_KEY);
+        return (!item.startsWith("#") && !item.startsWith("http")) || hasUriAttribute(item);
     }
 
     private static String resolve(String base, String line) {
-        if (line.startsWith(TAG_KEY)) {
-            Matcher matcher = REGEX_URI.matcher(line);
-            String value = matcher.find() ? matcher.group(1) : null;
-            return value == null ? line : line.replace(value, UriUtil.resolve(base, value));
+        if (hasUriAttribute(line)) {
+            return resolveUriLine(base, line);
         } else {
             return UriUtil.resolve(base, line);
         }
