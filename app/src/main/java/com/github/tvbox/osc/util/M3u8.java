@@ -30,7 +30,16 @@ public class M3u8 {
     private static final Pattern REGEX_X_DISCONTINUITY = Pattern.compile("#EXT-X-DISCONTINUITY[\\s\\S]*?(?=#EXT-X-DISCONTINUITY|$)");
     private static final Pattern REGEX_MEDIA_DURATION = Pattern.compile(TAG_MEDIA_DURATION + ":([\\d\\.]+)\\b");
     private static final Pattern REGEX_URI = Pattern.compile("URI=\"(.+?)\"");
-    private static final Pattern REGEX_AD_SEGMENT_URI = Pattern.compile("(?i)(^|[/?&=_.-])(ads|advert|advertise|advertisement|commercial|preroll|pre-roll|midroll|mid-roll|postroll|post-roll|sponsor|scte|vast|vmap)([/?&=_.-]|$)");
+
+    // 增强：广告片段 URL 特征识别（去广告接口常用规则）
+    private static final Pattern REGEX_AD_SEGMENT_URI = Pattern.compile("(?i)(^|[/?&=_.-])(ads?|adv|advert(ise(ment)?)?|commercial|preroll|pre-roll|midroll|mid-roll|postroll|post-roll|sponsor|scte|vast|vmap|interstitial|bumper)([/?&=_.-]|$)");
+
+    // 增强：广告域名特征（常见广告CDN）
+    private static final String[] AD_DOMAIN_KEYWORDS = {
+        "adservice", "adserver", "adsystem", "doubleclick", "googlesyndication",
+        "advertising", "2mdn.net", "moatads", "scorecardresearch", "quantserve"
+    };
+
     public static int currentAdCount;
 
     public static boolean isAd(String regex) {
@@ -38,17 +47,41 @@ public class M3u8 {
     }
 
     public static String purify(String tsUrlPre, String m3u8content) {
-//        LOG.i("echo-fixAdM3u8Ai m3u8content: " + m3u8content + "");
+//        LOG.i("echo-fixAdM3u8 m3u8content: " +m3u8content);
         long start = System.currentTimeMillis();
         currentAdCount = 0;
         if (null == m3u8content || m3u8content.length() == 0) return null;
         if (m3u8content.startsWith("\ufeff")) m3u8content = m3u8content.substring(1);
         if (!m3u8content.startsWith("#EXTM3U")) return null;
+
+        // Count total segments for final safety check
+        int totalSegments = 0;
+        String[] lines = m3u8content.split(m3u8content.contains("\r\n") ? "\r\n" : "\n");
+        for (String line : lines) {
+            if (line.length() > 0 && line.charAt(0) != '#') {
+                totalSegments++;
+            }
+        }
+
         String result = removeMinorityUrl(tsUrlPre, m3u8content);
         if (result != null && currentAdCount > 0) result = get(tsUrlPre, result);
         else result = get(tsUrlPre, m3u8content);
+
+        // Final safety check: if too many segments removed, return original content
+        if (totalSegments > 0 && currentAdCount > totalSegments * 0.5) {
+            LOG.e("echo-fixAdM3u8 ERROR: removed too many segments " + currentAdCount + "/" + totalSegments + ", using original content");
+            currentAdCount = 0;
+            result = m3u8content;
+        }
+        if (currentAdCount > 0 && !isPlayableMediaPlaylist(result)) {
+            LOG.e("echo-fixAdM3u8 ERROR: invalid playlist after ad removal, using original content");
+            currentAdCount = 0;
+            result = m3u8content;
+        }
+
         long cost = System.currentTimeMillis() - start;
-        LOG.i("echo-fixAdM3u8Ai cost: " + cost + "ms");
+        LOG.i("echo-fixAdM3u8 cost: " + cost + "ms, removed: " + currentAdCount + " segments");
+//        LOG.i("echo-fixAdM3u8 result: " + result );
         return result;
     }
 
@@ -62,10 +95,6 @@ public class M3u8 {
         }
         return  maxTimes*1.0 / (totalTimes*1.0);
     }
-    /**
-     * @author asdfgh
-     * <a href="https://github.com/asdfgh"> asdfgh </a>
-     */
 
     private static int timesNoAd = 15;
     private static String removeMinorityUrl(String tsUrlPre, String m3u8content) {
@@ -73,6 +102,14 @@ public class M3u8 {
         if (m3u8content.contains("\r\n"))
             linesplit = "\r\n";
         String[] lines = m3u8content.split(linesplit);
+
+        // Count total segments for safety check
+        int totalSegments = 0;
+        for (String line : lines) {
+            if (line.length() > 0 && line.charAt(0) != '#') {
+                totalSegments++;
+            }
+        }
 
         // First pass: count normalized media path prefixes.
         HashMap<String, Integer> preUrlMap = new HashMap<>();
@@ -144,56 +181,46 @@ public class M3u8 {
         }
         if (maxTimes == 0) return null;
 
-        boolean dealedExtXKey = false;
+        // Diagnostic logging
+        LOG.i("echo-fixAdM3u8 URL pattern count: " + preUrlMap.size() + ", maxTimes: " + maxTimes + ", total: " + totalSegments);
+
+        StringBuilder filtered = new StringBuilder();
+        List<String> pendingSegmentTags = new ArrayList<>();
         for (int i = 0; i < lines.length; ++i) {
-            // Resolve the encryption key URI once.
-            if (!dealedExtXKey && lines[i].startsWith("#EXT-X-KEY")) {
-                String keyUrl = "";
-                int start = lines[i].indexOf("URI=\"");
-                if (start != -1) {
-                    start += "URI=\"".length();
-                    int end = lines[i].indexOf("\"", start);
-                    if (end != -1) {
-                        keyUrl = lines[i].substring(start, end);
-                    }
-                    if (!keyUrl.startsWith("http://") && !keyUrl.startsWith("https://")) {
-                        String newKeyUrl = toAbsoluteUrl(tsUrlPre, keyUrl);
-                        lines[i] = lines[i].replace("URI=\"" + keyUrl + "\"", "URI=\"" + newKeyUrl + "\"");
-                    }
-                    dealedExtXKey = true;
-                }
-            }
-            if (lines[i].length() == 0 || lines[i].charAt(0) == '#') {
+            String item = lines[i].trim();
+            if (item.length() == 0) {
+                if (pendingSegmentTags.isEmpty()) appendLine(filtered, lines[i], linesplit);
+                else pendingSegmentTags.add(lines[i]);
                 continue;
             }
-            // Filter by the selected strategy.
+            if (item.charAt(0) == '#') {
+                String output = item.startsWith(TAG_KEY) ? resolveKeyLine(tsUrlPre, lines[i]) : lines[i];
+                if (isSegmentTag(item)) pendingSegmentTags.add(output);
+                else {
+                    flush(filtered, pendingSegmentTags, linesplit);
+                    appendLine(filtered, output, linesplit);
+                }
+                continue;
+            }
+
             String absoluteUrl = toAbsoluteUrl(tsUrlPre, lines[i]);
-            if (!domainFiltering) {
-                if (absoluteUrl.startsWith(maxTimesPreUrl)) {
-                    lines[i] = absoluteUrl;
-                } else {
-                    if (i > 0 && lines[i - 1].length() > 0 && lines[i - 1].charAt(0) == '#') {
-                        lines[i - 1] = "";
-                    }
-                    lines[i] = "";
-                    currentAdCount+=1;
-                }
+            if (shouldKeepMediaUrl(absoluteUrl, domainFiltering, maxTimesPreUrl, preUrlMap)) {
+                flush(filtered, pendingSegmentTags, linesplit);
+                appendLine(filtered, absoluteUrl, linesplit);
             } else {
-                int ifirst = absoluteUrl.indexOf('/', 9);
-                String domain = (ifirst > 0) ? absoluteUrl.substring(0, ifirst) : absoluteUrl;
-                Integer cnt = preUrlMap.get(domain);
-                if (domain.equals(maxTimesPreUrl) || (cnt != null && cnt > timesNoAd)) {
-                    lines[i] = absoluteUrl;
-                } else {
-                    if (i > 0 && lines[i - 1].length() > 0 && lines[i - 1].charAt(0) == '#') {
-                        lines[i - 1] = "";
-                    }
-                    lines[i] = "";
-                    currentAdCount+=1;
-                }
+                pendingSegmentTags.clear();
+                currentAdCount += 1;
             }
         }
-        return String.join(linesplit, lines);
+
+        // Safety check: if removal ratio is too high, likely a false positive
+        if (totalSegments > 0 && currentAdCount > totalSegments * 0.3) {
+            LOG.i("echo-fixAdM3u8 suspicious ad count: " + currentAdCount + "/" + totalSegments + ", skipping URL filtering");
+            currentAdCount = 0;  // Reset to avoid affecting subsequent filters
+            return null;  // Skip this filtering method
+        }
+
+        return normalizeMediaPlaylist(filtered.toString());
     }
 
     private static String get(String tsUrlPre, String m3u8Content) {
@@ -284,7 +311,8 @@ public class M3u8 {
                 continue;
             }
 
-            if (inAdBreak || hasAdSignal(pending) || isAdSegmentUri(item)) {
+            // 增强：检查 URL 特征和域名特征
+            if (inAdBreak || hasAdSignal(pending) || isAdSegmentUri(item) || hasAdDomain(item)) {
                 pending.clear();
                 currentAdCount += 1;
                 changed = true;
@@ -303,6 +331,15 @@ public class M3u8 {
         pending.clear();
     }
 
+    private static void flush(StringBuilder sb, List<String> pending, String linesplit) {
+        for (String line : pending) appendLine(sb, line, linesplit);
+        pending.clear();
+    }
+
+    private static void appendLine(StringBuilder sb, String line, String linesplit) {
+        sb.append(line).append(linesplit);
+    }
+
     private static boolean hasAdSignal(List<String> pending) {
         for (String line : pending) {
             if (isAdBreakStart(line.trim()) || isAdSignalTag(line.trim())) return true;
@@ -315,15 +352,20 @@ public class M3u8 {
     }
 
     private static boolean isAdSignalTag(String line) {
+        // 增强：支持更多广告信号标记
         if (line.startsWith("#EXT-OATCLS-SCTE35")) return true;
         if (line.startsWith("#EXT-X-SCTE35")) return true;
         if (line.startsWith("#EXT-X-SPLICEPOINT-SCTE35")) return true;
+        if (line.startsWith("#EXT-X-CUE")) return true;  // 新增
         if (line.startsWith("#EXT-X-ASSET")) return true;
         if (line.startsWith("#EXT-X-VMAP-AD-BREAK")) return true;
+        if (line.startsWith("#EXT-X-AD")) return true;  // 新增
+        if (line.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE")) return false;  // 排除正常标记
         return false;
     }
 
     private static boolean isSegmentTag(String line) {
+        if (line.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE")) return false;
         return line.startsWith(TAG_MEDIA_DURATION) || line.startsWith("#EXT-X-BYTERANGE") || line.startsWith("#EXT-X-PROGRAM-DATE-TIME") || line.startsWith("#EXT-X-DISCONTINUITY") || line.startsWith("#EXT-X-PART") || line.startsWith("#EXT-X-PRELOAD-HINT");
     }
 
@@ -334,11 +376,26 @@ public class M3u8 {
 
     private static boolean isAdLikeText(String line) {
         String lower = line.toLowerCase();
-        return lower.contains("scte") || lower.contains("cue") || lower.contains("interstitial") || lower.contains("vmap") || lower.contains("vast") || lower.contains("advert") || lower.contains("commercial") || lower.contains("ad-") || lower.contains("ad_") || lower.contains("ad.");
+        return lower.contains("scte") || lower.contains("cue") || lower.contains("interstitial") ||
+               lower.contains("vmap") || lower.contains("vast") || lower.contains("advert") ||
+               lower.contains("commercial") || lower.contains("ad-") || lower.contains("ad_") ||
+               lower.contains("ad.") || lower.contains("preroll") || lower.contains("midroll") ||
+               lower.contains("postroll") || lower.contains("bumper");  // 增强
     }
 
     private static boolean isAdSegmentUri(String line) {
         return REGEX_AD_SEGMENT_URI.matcher(line).find();
+    }
+
+    // 增强：检查是否包含广告域名特征
+    private static boolean hasAdDomain(String url) {
+        String lower = url.toLowerCase();
+        for (String keyword : AD_DOMAIN_KEYWORDS) {
+            if (lower.contains(keyword)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String cleanDiscontinuityGroups(String tsUrlPre, String m3u8Content) {
@@ -388,10 +445,24 @@ public class M3u8 {
 
     private static boolean shouldDropGroup(Group group, Group main) {
         if (group == main || group.segmentCount == 0) return false;
-        boolean shortGroup = group.segmentCount <= 2 || (main.totalDuration > 0 && group.totalDuration > 0 && group.totalDuration < main.totalDuration * 0.18);
-        boolean differentHost = main.host.length() > 0 && group.host.length() > 0 && !main.host.equals(group.host);
-        boolean differentPath = main.pathPrefix.length() > 0 && group.pathPrefix.length() > 0 && !main.pathPrefix.equals(group.pathPrefix);
-        boolean adLike = group.adLikeCount > 0 || differentHost || (group.segmentCount <= 2 && differentPath);
+
+        // 增强：更严格的广告识别条件
+        boolean shortGroup = group.segmentCount <= 2 ||
+                           (main.totalDuration > 0 && group.totalDuration > 0 &&
+                            group.totalDuration < main.totalDuration * 0.18);
+
+        boolean differentHost = main.host.length() > 0 && group.host.length() > 0 &&
+                               !main.host.equals(group.host);
+
+        boolean differentPath = main.pathPrefix.length() > 0 && group.pathPrefix.length() > 0 &&
+                               !main.pathPrefix.equals(group.pathPrefix);
+
+        // 增强：检查广告域名和URL特征
+        boolean hasAdFeature = group.adLikeCount > 0 || hasAdDomain(group.host) ||
+                              isAdSegmentUri(group.pathPrefix);
+
+        boolean adLike = hasAdFeature || differentHost || (group.segmentCount <= 2 && differentPath);
+
         return shortGroup && adLike;
     }
 
@@ -417,6 +488,74 @@ public class M3u8 {
         return UriUtil.resolve(base, line);
     }
 
+    private static boolean shouldKeepMediaUrl(String absoluteUrl, boolean domainFiltering, String maxTimesPreUrl, HashMap<String, Integer> preUrlMap) {
+        if (!domainFiltering) return absoluteUrl.startsWith(maxTimesPreUrl);
+        int ifirst = absoluteUrl.indexOf('/', 9);
+        String domain = (ifirst > 0) ? absoluteUrl.substring(0, ifirst) : absoluteUrl;
+        Integer cnt = preUrlMap.get(domain);
+        return domain.equals(maxTimesPreUrl) || (cnt != null && cnt > timesNoAd);
+    }
+
+    private static String resolveKeyLine(String base, String line) {
+        Matcher matcher = REGEX_URI.matcher(line);
+        String value = matcher.find() ? matcher.group(1) : null;
+        return value == null ? line : line.replace(value, UriUtil.resolve(base, value));
+    }
+
+    private static String normalizeMediaPlaylist(String content) {
+        StringBuilder sb = new StringBuilder();
+        boolean seenMedia = false;
+        boolean hasPendingDiscontinuity = false;
+        String pendingDiscontinuity = "";
+        for (String raw : content.replaceAll("\r\n", "\n").split("\n", -1)) {
+            String item = raw.trim();
+            if (isDiscontinuityTag(item)) {
+                if (seenMedia && !hasPendingDiscontinuity) {
+                    pendingDiscontinuity = raw;
+                    hasPendingDiscontinuity = true;
+                }
+                continue;
+            }
+            if (hasPendingDiscontinuity) {
+                if (item.length() == 0) continue;
+                if (!item.startsWith(TAG_ENDLIST)) sb.append(pendingDiscontinuity).append("\n");
+                hasPendingDiscontinuity = false;
+            }
+            if (item.length() == 0 && sb.length() == 0) continue;
+            sb.append(raw).append("\n");
+            if (isMediaUriLine(item)) seenMedia = true;
+        }
+        return sb.toString();
+    }
+
+    private static boolean isPlayableMediaPlaylist(String content) {
+        if (content == null || !content.startsWith("#EXTM3U")) return false;
+        int mediaCount = 0;
+        boolean pendingExtInf = false;
+        for (String raw : content.replaceAll("\r\n", "\n").split("\n")) {
+            String line = raw.trim();
+            if (line.length() == 0) continue;
+            if (line.startsWith(TAG_MEDIA_DURATION)) {
+                if (pendingExtInf) return false;
+                pendingExtInf = true;
+            } else if (isMediaUriLine(line)) {
+                mediaCount += 1;
+                pendingExtInf = false;
+            } else if (line.startsWith(TAG_ENDLIST) && pendingExtInf) {
+                return false;
+            }
+        }
+        return mediaCount > 0 && !pendingExtInf;
+    }
+
+    private static boolean isMediaUriLine(String line) {
+        return line.length() > 0 && !line.startsWith("#");
+    }
+
+    private static boolean isDiscontinuityTag(String line) {
+        return line.startsWith(TAG_DISCONTINUITY) && !line.startsWith("#EXT-X-DISCONTINUITY-SEQUENCE");
+    }
+
     private static class Group {
         private final List<String> lines = new ArrayList<>();
         private int segmentCount = 0;
@@ -440,7 +579,7 @@ public class M3u8 {
                 return;
             }
             segmentCount += 1;
-            if (isAdSegmentUri(line)) adLikeCount += 1;
+            if (isAdSegmentUri(line) || hasAdDomain(line)) adLikeCount += 1;  // 增强
             if (host.length() == 0) host = hostOf(line);
             if (pathPrefix.length() == 0) pathPrefix = pathPrefixOf(line);
         }

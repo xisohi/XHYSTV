@@ -7,7 +7,6 @@ import com.github.tvbox.osc.bean.Danmu;
 import com.github.tvbox.osc.util.DanmuHelper;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.LOG;
-import com.lzy.okgo.OkGo;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -16,7 +15,8 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import java.net.SocketTimeoutException;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
@@ -31,8 +31,17 @@ import master.flame.danmaku.danmaku.model.android.DanmakuFactory;
 import master.flame.danmaku.danmaku.model.android.Danmakus;
 import master.flame.danmaku.danmaku.parser.BaseDanmakuParser;
 import master.flame.danmaku.danmaku.util.DanmakuUtils;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
 
 public class Parser extends BaseDanmakuParser {
+    private static final long HTTP_TIMEOUT_MS = 20 * 1000L;
+    private static final OkHttpClient HTTP_CLIENT = new OkHttpClient.Builder()
+            .readTimeout(HTTP_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .writeTimeout(HTTP_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .connectTimeout(HTTP_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+            .retryOnConnectionFailure(true)
+            .build();
     private final Danmu danmu;
     private float scaleX;
     private float scaleY;
@@ -52,12 +61,28 @@ public class Parser extends BaseDanmakuParser {
         if (source.startsWith("file")) return FileUtils.read(source);
         if (source.startsWith("http")) {
             try {
-                okhttp3.Response response = OkGo.<String>get(source).execute();
+                okhttp3.Response response = executeHttp(source);
                 String content = readBody(response);
                 LOG.i("echo-danmu http code: " + response.code()
                         + ", encoding: " + response.header("Content-Encoding", "")
                         + ", length: " + content.length());
                 return content;
+            } catch (SocketTimeoutException e) {
+                if (isLocalProxy(source)) {
+                    try {
+                        LOG.e("echo-danmu load timeout, retry local proxy");
+                        okhttp3.Response response = executeHttp(source);
+                        String content = readBody(response);
+                        LOG.i("echo-danmu retry http code: " + response.code()
+                                + ", encoding: " + response.header("Content-Encoding", "")
+                                + ", length: " + content.length());
+                        return content;
+                    } catch (Throwable retryError) {
+                        LOG.e("echo-danmu retry error: " + retryError.getMessage());
+                    }
+                }
+                LOG.e("echo-danmu load error: timeout");
+                return "";
             } catch (Throwable th) {
                 LOG.e("echo-danmu load error: " + th.getMessage());
                 return "";
@@ -66,17 +91,27 @@ public class Parser extends BaseDanmakuParser {
         return source;
     }
 
+    private okhttp3.Response executeHttp(String source) throws IOException {
+        Request request = new Request.Builder().url(source).get().build();
+        return HTTP_CLIENT.newCall(request).execute();
+    }
+
+    private boolean isLocalProxy(String source) {
+        return source.startsWith("http://127.0.0.1:")
+                || source.startsWith("http://localhost:");
+    }
+
     private String readBody(okhttp3.Response response) throws IOException {
         if (response.body() == null) return "";
         byte[] bytes = response.body().bytes();
-        if (looksXml(bytes)) return new String(bytes, StandardCharsets.UTF_8);
+        if (looksXml(bytes)) return new String(bytes, "UTF-8");
         String encoding = response.header("Content-Encoding", "");
         if ("gzip".equalsIgnoreCase(encoding)) {
             bytes = readAll(new GZIPInputStream(new ByteArrayInputStream(bytes)));
         } else if ("deflate".equalsIgnoreCase(encoding)) {
             bytes = inflate(bytes);
         }
-        return new String(bytes, StandardCharsets.UTF_8);
+        return new String(bytes, "UTF-8");
     }
 
     private boolean looksXml(byte[] bytes) {

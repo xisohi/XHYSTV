@@ -44,11 +44,14 @@ public class ApiDialog extends BaseDialog {
     private TextView tvAddress;
     private EditText inputApi;
     private EditText inputApiLive;
+    private View inputConfirm;
 
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void refresh(RefreshEvent event) {
         if (event.type == RefreshEvent.TYPE_API_URL_CHANGE) {
             inputApi.setText((String) event.obj);
+            inputApiLive.setText((String) event.obj);
+        } else if (event.type == RefreshEvent.TYPE_LIVE_API_URL_CHANGE) {
             inputApiLive.setText((String) event.obj);
         }
     }
@@ -61,33 +64,26 @@ public class ApiDialog extends BaseDialog {
         tvAddress = findViewById(R.id.tvAddress);
         inputApi = findViewById(R.id.input);
         inputApiLive = findViewById(R.id.inputLive);
+        inputConfirm = findViewById(R.id.inputConfirm);
         //内置网络接口在此处添加
         inputApi.setText(Hawk.get(HawkConfig.API_URL, ""));
         inputApiLive.setText(Hawk.get(HawkConfig.LIVE_API_URL, Hawk.get(HawkConfig.API_URL)));
         findViewById(R.id.inputSubmit).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                String newApi = inputApi.getText().toString().trim();
-                if (!newApi.isEmpty()) {
-                    HistoryHelper.setApiHistory(newApi);
-                    if(!newApi.equals(Hawk.get(HawkConfig.API_URL, newApi))){
-                        inputApiLive.setText(newApi);
-                        Hawk.put(HawkConfig.LIVE_API_URL, newApi);
-                    }
-                }
-                listener.onchange(newApi);
-                dismiss();
+                if (listener != null) listener.onLocalConfig(false);
             }
         });
         findViewById(R.id.inputSubmitLive).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                String newApi = inputApiLive.getText().toString().trim();
-                if (!newApi.isEmpty()) {
-                    HistoryHelper.setLiveApiHistory(newApi);
-                }
-                Hawk.put(HawkConfig.LIVE_API_URL, newApi);
-                dismiss();
+                if (listener != null) listener.onLocalConfig(true);
+            }
+        });
+        inputConfirm.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                saveAndDismiss();
             }
         });
         findViewById(R.id.apiHistory).setOnClickListener(new View.OnClickListener() {
@@ -149,21 +145,22 @@ public class ApiDialog extends BaseDialog {
                 }
             }
         });
+        initInputFocus();
         inputApi.setOnEditorActionListener(new TextView.OnEditorActionListener() {
             @Override
             public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
-                if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_SEARCH || (event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER)) {
-                    String newApi = inputApi.getText().toString().trim();
-                    if (!newApi.isEmpty()) {
-                        HistoryHelper.setApiHistory(newApi);
-
-                        if(!newApi.equals(Hawk.get(HawkConfig.API_URL, newApi))){
-                            inputApiLive.setText(newApi);
-                            Hawk.put(HawkConfig.LIVE_API_URL, newApi);
-                        }
-                    }
-                    listener.onchange(newApi);
-                    dismiss();
+                if (isEditorConfirm(actionId, event) || actionId == EditorInfo.IME_ACTION_NEXT) {
+                    focusInput(inputApiLive);
+                    return true;
+                }
+                return false;
+            }
+        });
+        inputApiLive.setOnEditorActionListener(new TextView.OnEditorActionListener() {
+            @Override
+            public boolean onEditorAction(TextView v, int actionId, KeyEvent event) {
+                if (isEditorConfirm(actionId, event)) {
+                    inputConfirm.requestFocus();
                     return true;
                 }
                 return false;
@@ -172,19 +169,78 @@ public class ApiDialog extends BaseDialog {
         refreshQRCode();
     }
 
+    private void initInputFocus() {
+        inputApi.setCursorVisible(false);
+        inputApiLive.setCursorVisible(false);
+        View.OnFocusChangeListener listener = new View.OnFocusChangeListener() {
+            @Override
+            public void onFocusChange(View v, boolean hasFocus) {
+                if (v instanceof EditText) {
+                    ((EditText) v).setCursorVisible(hasFocus);
+                    if (hasFocus) moveCursorToEnd((EditText) v);
+                }
+            }
+        };
+        inputApi.setOnFocusChangeListener(listener);
+        inputApiLive.setOnFocusChangeListener(listener);
+    }
+
+    private boolean isEditorConfirm(int actionId, KeyEvent event) {
+        if (actionId == EditorInfo.IME_ACTION_DONE || actionId == EditorInfo.IME_ACTION_SEARCH) return true;
+        return event != null && event.getKeyCode() == KeyEvent.KEYCODE_ENTER && event.getAction() == KeyEvent.ACTION_UP;
+    }
+
+    private void focusInput(EditText input) {
+        input.requestFocus();
+        input.setCursorVisible(true);
+        moveCursorToEnd(input);
+    }
+
+    private void moveCursorToEnd(EditText input) {
+        input.setSelection(input.getText() == null ? 0 : input.getText().length());
+    }
+
     private void refreshQRCode() {
         String address = ControlManager.get().getAddress(false);
         tvAddress.setText(String.format("手机/电脑扫描上方二维码或者直接浏览器访问地址\n%s", address));
         ivQRCode.setImageBitmap(QRCodeGen.generateBitmap(address+"api.html", AutoSizeUtils.mm2px(getContext(), 300), AutoSizeUtils.mm2px(getContext(), 300)));
     }
 
+    private void saveAndDismiss() {
+        String newApi = inputApi.getText().toString().trim();
+        String newLiveApi = inputApiLive.getText().toString().trim();
+        if (!newApi.isEmpty()) {
+            HistoryHelper.setApiHistory(newApi);
+            if (!newApi.equals(Hawk.get(HawkConfig.API_URL, newApi))) {
+                inputApiLive.setText(newApi);
+                newLiveApi = newApi;
+            }
+        }
+        if (!newLiveApi.isEmpty()) {
+            HistoryHelper.setLiveApiHistory(newLiveApi);
+        }
+        Hawk.put(HawkConfig.LIVE_API_URL, newLiveApi);
+        if (listener != null) listener.onchange(newApi);
+        dismiss();
+    }
+
     public void setOnListener(OnListener listener) {
         this.listener = listener;
+    }
+
+    public void setLocalApi(String api, boolean live) {
+        if (live) {
+            inputApiLive.setText(api);
+        } else {
+            inputApi.setText(api);
+        }
     }
 
     OnListener listener = null;
 
     public interface OnListener {
         void onchange(String api);
+
+        void onLocalConfig(boolean live);
     }
 }

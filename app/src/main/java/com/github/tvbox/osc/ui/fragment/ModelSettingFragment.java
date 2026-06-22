@@ -2,7 +2,12 @@ package com.github.tvbox.osc.ui.fragment;
 
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.database.Cursor;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
+import android.provider.DocumentsContract;
+import android.provider.OpenableColumns;
 import android.os.Handler;
 import android.view.View;
 import android.widget.LinearLayout;
@@ -22,6 +27,7 @@ import com.github.tvbox.osc.bean.SourceBean;
 import com.github.tvbox.osc.event.RefreshEvent;
 import com.github.tvbox.osc.player.thirdparty.RemoteTVBox;
 import com.github.tvbox.osc.ui.activity.HomeActivity;
+import com.github.tvbox.osc.ui.activity.LocalFileActivity;
 import com.github.tvbox.osc.ui.activity.SettingActivity;
 import com.github.tvbox.osc.ui.adapter.ApiHistoryDialogAdapter;
 import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
@@ -45,11 +51,16 @@ import com.lzy.okgo.callback.FileCallback;
 import com.lzy.okgo.model.Progress;
 import com.lzy.okgo.model.Response;
 import com.orhanobut.hawk.Hawk;
+import com.hjq.permissions.OnPermissionCallback;
+import com.hjq.permissions.Permission;
+import com.hjq.permissions.XXPermissions;
 
 import org.greenrobot.eventbus.EventBus;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -61,6 +72,7 @@ import tv.danmaku.ijk.media.player.IjkMediaPlayer;
  * @description:
  */
 public class ModelSettingFragment extends BaseLazyFragment {
+    private static final int REQUEST_LOCAL_CONFIG = 1001;
     private TextView tvDebugOpen;
     private TextView tvMediaCodec;
     private TextView tvParseWebView;
@@ -84,6 +96,8 @@ public class ModelSettingFragment extends BaseLazyFragment {
     private TextView tvRecStyleText;
     private TextView tvIjkCachePlay;
     private TextView tvHomeDefaultShow;
+    private ApiDialog apiDialog;
+    private boolean selectLocalLive;
     private TextView tvDanmuOpenText;
     private TextView tvDanmuApiText;
 
@@ -309,7 +323,8 @@ public class ModelSettingFragment extends BaseLazyFragment {
             @Override
             public void onClick(View v) {
                 FastClickCheckUtil.check(v);
-                ApiDialog dialog = new ApiDialog(mActivity);
+                apiDialog = new ApiDialog(mActivity);
+                ApiDialog dialog = apiDialog;
                 EventBus.getDefault().register(dialog);
                 dialog.setOnListener(new ApiDialog.OnListener() {
                     @Override
@@ -325,12 +340,18 @@ public class ModelSettingFragment extends BaseLazyFragment {
                             restartAppAfterConfigChanged();
                         }
                     }
+
+                    @Override
+                    public void onLocalConfig(boolean live) {
+                        openLocalConfig(live);
+                    }
                 });
                 dialog.setOnDismissListener(new DialogInterface.OnDismissListener() {
                     @Override
                     public void onDismiss(DialogInterface dialog) {
                         ((BaseActivity) mActivity).hideSysBar();
                         EventBus.getDefault().unregister(dialog);
+                        apiDialog = null;
                     }
                 });
                 dialog.show();
@@ -902,6 +923,151 @@ public class ModelSettingFragment extends BaseLazyFragment {
         FastClickCheckUtil.check(v);
         Hawk.put(HawkConfig.IJK_CACHE_PLAY, !Hawk.get(HawkConfig.IJK_CACHE_PLAY, false));
         tvIjkCachePlay.setText(Hawk.get(HawkConfig.IJK_CACHE_PLAY, false) ? "开启" : "关闭");
+    }
+
+    private void openLocalConfig(boolean live) {
+        selectLocalLive = live;
+        if (!XXPermissions.isGranted(mContext, Permission.Group.STORAGE)) {
+            Toast.makeText(getContext(), "请选择文件前需要先授予存储权限", Toast.LENGTH_SHORT).show();
+            XXPermissions.with(mActivity)
+                    .permission(Permission.Group.STORAGE)
+                    .request(new OnPermissionCallback() {
+                        @Override
+                        public void onGranted(List<String> permissions, boolean all) {
+                            if (all) {
+                                Toast.makeText(getContext(), "已获得存储权限", Toast.LENGTH_SHORT).show();
+                                openLocalFileActivity(selectLocalLive);
+                            }
+                        }
+
+                        @Override
+                        public void onDenied(List<String> permissions, boolean never) {
+                            if (never) {
+                                Toast.makeText(getContext(), "获取存储权限失败,请在系统设置中开启", Toast.LENGTH_SHORT).show();
+                                XXPermissions.startPermissionActivity(mActivity, permissions);
+                            } else {
+                                Toast.makeText(getContext(), "获取存储权限失败", Toast.LENGTH_SHORT).show();
+                            }
+                        }
+                    });
+            return;
+        }
+        openLocalFileActivity(live);
+    }
+
+    private void openLocalFileActivity(boolean live) {
+        Intent intent = new Intent(mContext, LocalFileActivity.class);
+        intent.putExtra(LocalFileActivity.EXTRA_LIVE, live);
+        startActivityForResult(intent, REQUEST_LOCAL_CONFIG);
+    }
+
+    @Override
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_LOCAL_CONFIG || resultCode != android.app.Activity.RESULT_OK || data == null || data.getData() == null) {
+            return;
+        }
+        String api = localConfigToApi(data.getData());
+        if (api == null || api.isEmpty()) {
+            Toast.makeText(getContext(), "读取本地配置失败", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (apiDialog != null) {
+            apiDialog.setLocalApi(api, selectLocalLive);
+        }
+    }
+
+    private String localConfigToApi(Uri uri) {
+        String path = getPathFromUri(uri);
+        if (path == null || path.isEmpty()) {
+            path = copyUriToLocalConfig(uri);
+        }
+        if (path == null || path.isEmpty()) {
+            return "";
+        }
+        String storageRoot = Environment.getExternalStorageDirectory().getAbsolutePath();
+        if (path.startsWith(storageRoot)) {
+            return "clan://localhost/" + path.substring(storageRoot.length()).replaceFirst("^/+", "");
+        }
+        path = copyUriToLocalConfig(uri);
+        if (path != null && path.startsWith(storageRoot)) {
+            return "clan://localhost/" + path.substring(storageRoot.length()).replaceFirst("^/+", "");
+        }
+        return "";
+    }
+
+    private String getPathFromUri(Uri uri) {
+        try {
+            if ("file".equalsIgnoreCase(uri.getScheme())) {
+                return uri.getPath();
+            }
+            if (DocumentsContract.isDocumentUri(mContext, uri)) {
+                String docId = DocumentsContract.getDocumentId(uri);
+                if ("com.android.externalstorage.documents".equals(uri.getAuthority())) {
+                    String[] split = docId.split(":");
+                    if (split.length > 1 && "primary".equalsIgnoreCase(split[0])) {
+                        return Environment.getExternalStorageDirectory().getAbsolutePath() + "/" + split[1];
+                    }
+                }
+                if ("com.android.providers.downloads.documents".equals(uri.getAuthority()) && docId.startsWith("raw:")) {
+                    return docId.substring(4);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+        return null;
+    }
+
+    private String copyUriToLocalConfig(Uri uri) {
+        InputStream input = null;
+        FileOutputStream output = null;
+        try {
+            input = mContext.getContentResolver().openInputStream(uri);
+            if (input == null) return "";
+            File dir = new File(FileUtils.getExternalCachePath(), "config");
+            if (!dir.exists()) dir.mkdirs();
+            File file = new File(dir, getDisplayName(uri));
+            output = new FileOutputStream(file);
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = input.read(buffer)) != -1) {
+                output.write(buffer, 0, length);
+            }
+            return file.getAbsolutePath();
+        } catch (Throwable th) {
+            th.printStackTrace();
+            return "";
+        } finally {
+            try {
+                if (output != null) output.close();
+            } catch (Throwable ignored) {
+            }
+            try {
+                if (input != null) input.close();
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
+    private String getDisplayName(Uri uri) {
+        String name = "local_config.json";
+        Cursor cursor = null;
+        try {
+            cursor = mContext.getContentResolver().query(uri, null, null, null, null);
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (index >= 0) {
+                    String displayName = cursor.getString(index);
+                    if (displayName != null && !displayName.isEmpty()) {
+                        name = displayName;
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        } finally {
+            if (cursor != null) cursor.close();
+        }
+        return name;
     }
 
     private void onClickClearCache(View v) {

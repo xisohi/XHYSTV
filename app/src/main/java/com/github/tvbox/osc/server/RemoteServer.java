@@ -14,6 +14,7 @@ import com.github.tvbox.osc.base.App;
 import com.github.tvbox.osc.event.RefreshEvent;
 import com.github.tvbox.osc.event.ServerEvent;
 import com.github.tvbox.osc.util.FileUtils;
+import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.OkGoHelper;
 import com.github.tvbox.osc.util.Proxy;
 import com.google.gson.JsonArray;
@@ -101,10 +102,14 @@ public class RemoteServer extends NanoHTTPD {
 
     private Response getProxy(Object[] rs){
         try {
-            if (rs[0] instanceof NanoHTTPD.Response) return (NanoHTTPD.Response) rs[0];
-            int code = (int) rs[0];
-            String mime = (String) rs[1];
-            InputStream stream = rs[2] != null ? (InputStream) rs[2] : null;
+            if (rs == null || rs.length == 0) {
+                LOG.e("echo-proxy result invalid: " + describeProxyResult(rs));
+                return NanoHTTPD.newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "proxy result invalid");
+            }
+            if (rs[0] instanceof Response) return (Response) rs[0];
+            int code = parseProxyCode(rs[0]);
+            String mime = rs.length > 1 && rs[1] != null ? String.valueOf(rs[1]) : NanoHTTPD.MIME_PLAINTEXT;
+            InputStream stream = rs.length > 2 ? getProxyStream(rs[2]) : new ByteArrayInputStream(new byte[0]);
             Response response = NanoHTTPD.newChunkedResponse(
                     Response.Status.lookup(code),
                     mime,
@@ -122,8 +127,47 @@ public class RemoteServer extends NanoHTTPD {
             }
             return response;
         } catch (Throwable th) {
+            LOG.e("echo-proxy error: " + th.getMessage() + " result=" + describeProxyResult(rs));
             return NanoHTTPD.newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "500");
         }
+    }
+
+    private int parseProxyCode(Object code) {
+        if (code instanceof Number) return ((Number) code).intValue();
+        try {
+            return Integer.parseInt(String.valueOf(code));
+        } catch (Throwable th) {
+            return 500;
+        }
+    }
+
+    private InputStream getProxyStream(Object body) throws UnsupportedEncodingException {
+        if (body == null) return new ByteArrayInputStream(new byte[0]);
+        if (body instanceof InputStream) return (InputStream) body;
+        if (body instanceof byte[]) return new ByteArrayInputStream((byte[]) body);
+        return new ByteArrayInputStream(String.valueOf(body).getBytes("UTF-8"));
+    }
+
+    private String describeProxyResult(Object[] rs) {
+        if (rs == null) return "null";
+        StringBuilder builder = new StringBuilder();
+        builder.append("len=").append(rs.length);
+        for (int i = 0; i < rs.length; i++) {
+            Object item = rs[i];
+            builder.append(", [").append(i).append("]=");
+            if (item == null) {
+                builder.append("null");
+            } else if (item instanceof byte[]) {
+                builder.append("byte[").append(((byte[]) item).length).append("]");
+            } else if (item instanceof InputStream) {
+                builder.append(item.getClass().getName());
+            } else {
+                String text = String.valueOf(item);
+                if (text.length() > 200) text = text.substring(0, 200);
+                builder.append(item.getClass().getName()).append(":").append(text);
+            }
+        }
+        return builder.toString();
     }
 
     @Override
@@ -144,7 +188,10 @@ public class RemoteServer extends NanoHTTPD {
                     Map<String, String> params = session.getParms();
                     params.putAll(session.getHeaders());
                     if (params.containsKey("do")) {
+                        boolean isDanmuProxy = "danmu".equals(params.get("do"));
+                        if (isDanmuProxy) LOG.i("echo-proxy-danmu params: " + params.toString());
                         Object[] rs = ApiConfig.get().proxyLocal(params);
+                        if (isDanmuProxy) LOG.i("echo-proxy-danmu result: " + describeProxyResult(rs));
                         return getProxy(rs);
                     }
                     if (params.containsKey("go")) {
@@ -159,15 +206,15 @@ public class RemoteServer extends NanoHTTPD {
                         File localFile = new File(file);
                         if (localFile.exists()) {
                             if (localFile.isFile()) {
-                                return NanoHTTPD.newChunkedResponse(NanoHTTPD.Response.Status.OK, "application/octet-stream", new FileInputStream(localFile));
+                                return NanoHTTPD.newChunkedResponse(Response.Status.OK, "application/octet-stream", new FileInputStream(localFile));
                             } else {
-                                return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, fileList(root, f));
+                                return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, fileList(root, f));
                             }
                         } else {
-                            return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "File " + file + " not found!");
+                            return NanoHTTPD.newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, "File " + file + " not found!");
                         }
                     } catch (Throwable th) {
-                        return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, th.getMessage());
+                        return NanoHTTPD.newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, th.getMessage());
                     }
                 } else if (fileName.equals("/dns-query")) {
                     String name = session.getParms().get("name");
@@ -177,7 +224,7 @@ public class RemoteServer extends NanoHTTPD {
                     } catch (Throwable th) {
                         rs = new byte[0];
                     }
-                    return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, "application/dns-message", new ByteArrayInputStream(rs), rs.length);
+                    return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, "application/dns-message", new ByteArrayInputStream(rs), rs.length);
                 } else if (fileName.startsWith("/push/")) {
                     String url = fileName.substring(6);
                     if (url.startsWith("b64:")) {
@@ -190,10 +237,10 @@ public class RemoteServer extends NanoHTTPD {
                         url = URLDecoder.decode(url);
                     }
                     EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_PUSH_URL, url));
-                    return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "ok");    
+                    return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "ok");
                 }  else if (fileName.startsWith("/proxyM3u8")) {
-//                    com.github.tvbox.osc.util.LOG.i("echo-m3u8:"+m3u8Content);
-                    return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, m3u8Content);
+//                    com.github.tvbox.osc.util.LOG.i("echo-proxyM3u8 length:" + (m3u8Content == null ? 0 : m3u8Content.length()));
+                    return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, "application/vnd.apple.mpegurl", m3u8Content == null ? "" : m3u8Content);
                 }
                  else if (fileName.startsWith("/dash/")) {
                     String dashData = App.getInstance().getDashData();
@@ -205,7 +252,7 @@ public class RemoteServer extends NanoHTTPD {
                                 data
                         );
                     } catch (Throwable th) {
-                        return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, dashData);
+                        return NanoHTTPD.newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT, dashData);
                     }
                 }
             } else if (session.getMethod() == Method.POST) {
@@ -226,8 +273,8 @@ public class RemoteServer extends NanoHTTPD {
                     }
                     session.parseBody(files);
                 } catch (IOException IOExc) {
-                    return createPlainTextResponse(NanoHTTPD.Response.Status.INTERNAL_ERROR, "SERVER INTERNAL ERROR: IOException: " + IOExc.getMessage());
-                } catch (NanoHTTPD.ResponseException rex) {
+                    return createPlainTextResponse(Response.Status.INTERNAL_ERROR, "SERVER INTERNAL ERROR: IOException: " + IOExc.getMessage());
+                } catch (ResponseException rex) {
                     return createPlainTextResponse(rex.getStatus(), rex.getMessage());
                 }
                 for (RequestProcess process : postRequestList) {
@@ -259,7 +306,7 @@ public class RemoteServer extends NanoHTTPD {
                                     tmp.delete();
                             }
                         }
-                        return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
+                        return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
                     } else if (fileName.equals("/newFolder")) {
                         String path = params.get("path");
                         String name = params.get("name");
@@ -271,7 +318,7 @@ public class RemoteServer extends NanoHTTPD {
                             if (!flag.exists())
                                 flag.createNewFile();
                         }
-                        return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
+                        return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
                     } else if (fileName.equals("/delFolder")) {
                         String path = params.get("path");
                         String root = Environment.getExternalStorageDirectory().getAbsolutePath();
@@ -279,7 +326,7 @@ public class RemoteServer extends NanoHTTPD {
                         if (file.exists()) {
                             FileUtils.recursiveDelete(file);
                         }
-                        return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
+                        return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
                     } else if (fileName.equals("/delFile")) {
                         String path = params.get("path");
                         String root = Environment.getExternalStorageDirectory().getAbsolutePath();
@@ -287,10 +334,10 @@ public class RemoteServer extends NanoHTTPD {
                         if (file.exists()) {
                             file.delete();
                         }
-                        return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
+                        return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
                     }
                 } catch (Throwable th) {
-                    return NanoHTTPD.newFixedLengthResponse(NanoHTTPD.Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
+                    return NanoHTTPD.newFixedLengthResponse(Response.Status.OK, NanoHTTPD.MIME_PLAINTEXT, "OK");
                 }
             }
         }

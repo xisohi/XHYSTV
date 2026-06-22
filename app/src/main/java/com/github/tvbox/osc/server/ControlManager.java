@@ -9,6 +9,7 @@ import android.text.TextUtils;
 import com.github.tvbox.osc.event.RefreshEvent;
 import com.github.tvbox.osc.receiver.SearchReceiver;
 import com.github.tvbox.osc.util.HawkConfig;
+import com.github.tvbox.osc.util.HistoryHelper;
 import com.orhanobut.hawk.Hawk;
 
 import org.greenrobot.eventbus.EventBus;
@@ -76,6 +77,15 @@ public class ControlManager {
                 @Override
                 public void onApiReceived(String url) {
                     EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_API_URL_CHANGE, url));
+                }
+
+                @Override
+                public void onLiveApiReceived(String url) {
+                    if (!TextUtils.isEmpty(url)) {
+                        Hawk.put(HawkConfig.LIVE_API_URL, url);
+                        HistoryHelper.setLiveApiHistory(url);
+                    }
+                    EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_LIVE_API_URL_CHANGE, url));
                 }
 
                 @Override
