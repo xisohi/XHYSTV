@@ -20,6 +20,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import com.github.tvbox.osc.BuildConfig;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
+import com.github.tvbox.osc.api.DanmakuApi;
 import com.github.tvbox.osc.base.BaseActivity;
 import com.github.tvbox.osc.base.BaseLazyFragment;
 import com.github.tvbox.osc.bean.IJKCode;
@@ -868,6 +869,16 @@ public class ModelSettingFragment extends BaseLazyFragment {
         }, 2500);
     }
 
+    private void restartAppAfterCacheCleared() {
+        Toast.makeText(mContext, "缓存已清空,即将重启到主页!", Toast.LENGTH_LONG).show();
+        new Handler().postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                restartApp();
+            }
+        }, 2500);
+    }
+
     private void refreshApiLineText() {
         if (tvApiLine == null) return;
         ArrayList<String> apiLines = Hawk.get(HawkConfig.API_LINE_LIST, new ArrayList<String>());
@@ -891,8 +902,17 @@ public class ModelSettingFragment extends BaseLazyFragment {
 
     private void refreshDanmuApiText() {
         if (tvDanmuApiText == null) return;
-        String api = Hawk.get(HawkConfig.DANMU_API, "");
-        tvDanmuApiText.setText(api.isEmpty() ? "默认" : api);
+        if (DanmakuApi.isUseDefault()) {
+            tvDanmuApiText.setText("默认");
+            return;
+        }
+        String custom = Hawk.get(HawkConfig.DANMU_API, "");
+        if (!custom.isEmpty()) {
+            tvDanmuApiText.setText("自定义");
+            return;
+        }
+        String config = ApiConfig.get().getDanmaku();
+        tvDanmuApiText.setText(config.isEmpty() ? "默认" : "接口");
     }
 
     private void updateApiRowWeight(boolean showLine) {
@@ -1085,9 +1105,17 @@ public class ModelSettingFragment extends BaseLazyFragment {
                 }
             } catch (Exception e) {
                 e.printStackTrace();
+            } finally {
+                if (mActivity != null) {
+                    mActivity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            restartAppAfterCacheCleared();
+                        }
+                    });
+                }
             }
         }).start();
-        Toast.makeText(getContext(), "播放&Spider缓存已清空", Toast.LENGTH_LONG).show();
     }
 
 

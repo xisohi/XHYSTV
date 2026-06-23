@@ -404,7 +404,7 @@ public class SourceViewModel extends ViewModel {
                     try {
                         Spider sp = ApiConfig.get().getCSP(homeSourceBean);
                         String json = sp.categoryContent(sortData.id, page + "", true, sortData.filterSelect);
-                        LOG.i("echo-categoryContent:"+json);
+//                        LOG.i("echo-categoryContent:"+json);
                         json(listResult, json,homeSourceBean.getKey());
                     } catch (Throwable th) {
                         th.printStackTrace();
@@ -491,7 +491,7 @@ public class SourceViewModel extends ViewModel {
                         @Override
                         public void onSuccess(Response<String> response) {
                             String json = response.body();
-                            LOG.i("echo-list: " + json);
+//                            LOG.i("echo-list: " + json);
                             json(listResult, json, homeSourceBean.getKey());
                         }
 
@@ -818,7 +818,7 @@ public class SourceViewModel extends ViewModel {
                     @Override
                     public void onSuccess(Response<String> response) {
                             String json = response.body();
-                            LOG.i("echo-t4 search onSuccess"+json);
+//                            LOG.i("echo-t4 search onSuccess"+json);
                             json(searchResult, json, sourceBean.getKey(), searchToken);
                     }
 

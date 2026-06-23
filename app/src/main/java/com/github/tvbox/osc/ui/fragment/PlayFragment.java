@@ -57,7 +57,7 @@ import com.github.tvbox.osc.player.MyVideoView;
 import com.github.tvbox.osc.player.TrackInfo;
 import com.github.tvbox.osc.player.TrackInfoBean;
 import com.github.tvbox.osc.player.controller.VodController;
-import com.github.tvbox.osc.player.danmu.Parser;
+import com.github.tvbox.osc.player.danmu.DanmuLoadController;
 import com.github.tvbox.osc.server.ControlManager;
 import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
 import com.github.tvbox.osc.ui.dialog.DanmuSettingDialog;
@@ -65,7 +65,6 @@ import com.github.tvbox.osc.ui.dialog.SearchSubtitleDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.SubtitleDialog;
 import com.github.tvbox.osc.util.AdBlocker;
-import com.github.tvbox.osc.util.DanmuHelper;
 import com.github.tvbox.osc.util.DefaultConfig;
 import com.github.tvbox.osc.util.FileUtils;
 import com.github.tvbox.osc.util.HawkConfig;
@@ -116,9 +115,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import me.jessyan.autosize.AutoSize;
-import master.flame.danmaku.danmaku.model.BaseDanmaku;
-import master.flame.danmaku.danmaku.model.IDisplayer;
-import master.flame.danmaku.danmaku.model.android.DanmakuContext;
 import master.flame.danmaku.ui.widget.DanmakuView;
 import tv.danmaku.ijk.media.player.IMediaPlayer;
 import tv.danmaku.ijk.media.player.IjkTimedText;
@@ -140,12 +136,8 @@ public class PlayFragment extends BaseLazyFragment {
     private SourceViewModel sourceViewModel;
     private Handler mHandler;
     private boolean exitingPreview = false;
-    private ExecutorService danmuExecutor;
     private DanmakuView mDanmuView;
-    private DanmakuContext mDanmakuContext;
-    private String danmuText;
-    private final AtomicInteger danmuLoadSeq = new AtomicInteger();
-    private int danmuStartedSeq = -1;
+    private DanmuLoadController danmuLoadController;
 
     private final long videoDuration = -1;
 
@@ -176,121 +168,26 @@ public class PlayFragment extends BaseLazyFragment {
 
     private void initDanmuView() {
         mDanmuView = findViewById(R.id.danmaku);
-        mDanmakuContext = DanmakuContext.create();
-        mVideoView.setDanmuView(mDanmuView);
-        setDanmuViewSettings(false);
+        danmuLoadController = new DanmuLoadController(mVideoView, mController, mDanmuView);
     }
 
     private void setDanmuViewSettings(boolean reload) {
-        if (mDanmuView == null || mDanmakuContext == null) return;
-        if (!DanmuHelper.isOpen()) {
-            releaseDanmuView();
-            if (mController != null) mController.setHasDanmu(!TextUtils.isEmpty(danmuText));
-            return;
-        }
-        HashMap<Integer, Integer> maxLines = new HashMap<>();
-        int maxLine = DanmuHelper.getMaxLine();
-        maxLines.put(BaseDanmaku.TYPE_FIX_TOP, maxLine);
-        maxLines.put(BaseDanmaku.TYPE_SCROLL_RL, maxLine);
-        maxLines.put(BaseDanmaku.TYPE_SCROLL_LR, maxLine);
-        maxLines.put(BaseDanmaku.TYPE_FIX_BOTTOM, maxLine);
-        mDanmakuContext.setMaximumLines(maxLines)
-                .setScrollSpeedFactor(DanmuHelper.getSpeed())
-                .setDanmakuTransparency(DanmuHelper.getAlpha())
-                .setScaleTextSize(DanmuHelper.getSizeScale());
-        mDanmakuContext.setDanmakuStyle(IDisplayer.DANMAKU_STYLE_STROKEN, 3)
-                .setDanmakuMargin(8);
-        if (reload && !TextUtils.isEmpty(danmuText) && DanmuHelper.isOpen()) {
-            prepareDanmu(danmuText);
-        }
+        if (danmuLoadController != null) danmuLoadController.applySettings(reload);
     }
 
     private void checkDanmu(String danmu) {
-        danmuText = TextUtils.isEmpty(danmu) ? "" : danmu.trim();
-        releaseDanmuView();
-        boolean hasDanmu = !TextUtils.isEmpty(danmuText);
-        mController.setHasDanmu(hasDanmu);
-        if (!hasDanmu || !DanmuHelper.isOpen()) {
-            if (mDanmuView != null) mDanmuView.setVisibility(View.GONE);
-            return;
+        if (danmuLoadController != null) {
+            VodInfo.VodSeries series = mVodInfo == null ? null : getCurrentSeries(mVodInfo.playFlag, mVodInfo.playIndex);
+            danmuLoadController.check(danmu, mVodInfo == null ? "" : mVodInfo.name, series == null ? "" : series.name);
         }
-        if (mDanmuView != null) mDanmuView.setVisibility(View.VISIBLE);
-        prepareDanmu(danmuText);
-    }
-
-    private void prepareDanmu(String danmu) {
-        if (TextUtils.isEmpty(danmu)) return;
-        int seq = danmuLoadSeq.incrementAndGet();
-        danmuStartedSeq = -1;
-        if (danmuExecutor == null || danmuExecutor.isShutdown()) {
-            danmuExecutor = Executors.newSingleThreadExecutor();
-        }
-        danmuExecutor.execute(() -> {
-            Parser parser = new Parser(danmu);
-            int danmuCount = parser.getDanmuCount();
-            LOG.i("echo-danmu parsed count: " + danmuCount);
-            if (mDanmuView == null) return;
-            mDanmuView.post(() -> {
-                if (seq != danmuLoadSeq.get() || mDanmuView == null || mDanmakuContext == null) return;
-                try {
-                    mDanmuView.release();
-                    if (mVideoView != null) mVideoView.setDanmuView(mDanmuView);
-                    if (danmuCount <= 0) {
-                        LOG.e("echo-danmu empty after parse");
-                        mDanmuView.setVisibility(View.GONE);
-                        return;
-                    }
-                    mDanmuView.prepare(parser, mDanmakuContext);
-                    mDanmuView.setVisibility(DanmuHelper.isOpen() ? View.VISIBLE : View.GONE);
-                    startDanmuIfReady(seq);
-                    mDanmuView.postDelayed(() -> startDanmuIfReady(seq), 300);
-                    mDanmuView.postDelayed(() -> startDanmuIfReady(seq), 1000);
-                } catch (Throwable th) {
-                    LOG.e("echo-danmu prepare error: " + th.getMessage());
-                    mDanmuView.setVisibility(View.GONE);
-                }
-            });
-        });
-    }
-
-    private void startDanmuIfReady(int seq) {
-        if (seq != danmuLoadSeq.get()
-                || seq == danmuStartedSeq
-                || mVideoView == null
-                || !mVideoView.isPlaying()
-                || mDanmuView == null
-                || !mDanmuView.isPrepared()
-                || !DanmuHelper.isOpen()) {
-            return;
-        }
-        long position = mVideoView.getCurrentPosition();
-        mDanmuView.setVisibility(View.VISIBLE);
-        mDanmuView.seekTo(position);
-        mDanmuView.start(position);
-        danmuStartedSeq = seq;
-        LOG.i("echo-danmu start at: " + position);
     }
 
     private void startDanmuIfReady() {
-        startDanmuIfReady(danmuLoadSeq.get());
+        if (danmuLoadController != null) danmuLoadController.startIfReady();
     }
 
     private void resetDanmuState() {
-        DanmakuApi.cancel();
-        danmuText = "";
-        danmuLoadSeq.incrementAndGet();
-        danmuStartedSeq = -1;
-        if (mController != null) mController.setHasDanmu(false);
-        releaseDanmuView();
-    }
-
-    private void releaseDanmuView() {
-        if (mDanmuView == null) return;
-        try {
-            mDanmuView.release();
-        } catch (Throwable ignored) {
-        }
-        mDanmuView.setVisibility(View.GONE);
+        if (danmuLoadController != null) danmuLoadController.reset();
     }
 
     public long getSavedProgress(String url) {
@@ -981,6 +878,12 @@ public class PlayFragment extends BaseLazyFragment {
                 if (!TextUtils.equals(key, progressKey)) return;
                 checkDanmu(url);
             }
+
+            @Override
+            public void onNotFound() {
+                if (!TextUtils.equals(key, progressKey)) return;
+                checkDanmu("");
+            }
         });
     }
 
@@ -1130,10 +1033,9 @@ public class PlayFragment extends BaseLazyFragment {
         ApiConfig.get().setCurrentPlaySourceKey("");
         cancelPlayTimeout();
         EventBus.getDefault().unregister(this);
-        resetDanmuState();
-        if (danmuExecutor != null) {
-            danmuExecutor.shutdownNow();
-            danmuExecutor = null;
+        if (danmuLoadController != null) {
+            danmuLoadController.destroy();
+            danmuLoadController = null;
         }
         if (mVideoView != null) {
             mVideoView.release();

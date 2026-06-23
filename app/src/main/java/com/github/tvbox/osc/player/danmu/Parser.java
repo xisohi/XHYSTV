@@ -43,6 +43,10 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 
 public class Parser extends BaseDanmakuParser {
+    public interface CancelChecker {
+        boolean isCancelled();
+    }
+
     private static final long HTTP_TIMEOUT_MS = 20 * 1000L;
     private static final X509TrustManager TRUST_ALL_CERT = new X509TrustManager() {
         @Override
@@ -67,11 +71,17 @@ public class Parser extends BaseDanmakuParser {
     private static final OkHttpClient HTTP_CLIENT = buildHttpClient(false);
     private static final OkHttpClient UNSAFE_HTTP_CLIENT = buildHttpClient(true);
     private final Danmu danmu;
+    private final CancelChecker cancelChecker;
     private float scaleX;
     private float scaleY;
     private int index;
 
     public Parser(String input) {
+        this(input, null);
+    }
+
+    public Parser(String input, CancelChecker cancelChecker) {
+        this.cancelChecker = cancelChecker;
         this.danmu = Danmu.fromXml(resolveContent(input));
     }
 
@@ -80,12 +90,18 @@ public class Parser extends BaseDanmakuParser {
     }
 
     private String resolveContent(String input) {
+        if (isCancelled()) return "";
         if (TextUtils.isEmpty(input)) return "";
         String source = input.trim();
         if (source.startsWith("file")) return FileUtils.read(source);
         if (source.startsWith("http")) {
             try {
+                if (isCancelled()) return "";
                 okhttp3.Response response = executeHttp(source);
+                if (isCancelled()) {
+                    response.close();
+                    return "";
+                }
                 String content = readBody(response);
                 LOG.i("echo-danmu http code: " + response.code()
                         + ", encoding: " + response.header("Content-Encoding", "")
@@ -95,7 +111,12 @@ public class Parser extends BaseDanmakuParser {
                 if (isLocalProxy(source)) {
                     try {
                         LOG.e("echo-danmu load timeout, retry local proxy");
+                        if (isCancelled()) return "";
                         okhttp3.Response response = executeHttp(source);
+                        if (isCancelled()) {
+                            response.close();
+                            return "";
+                        }
                         String content = readBody(response);
                         LOG.i("echo-danmu retry http code: " + response.code()
                                 + ", encoding: " + response.header("Content-Encoding", "")
@@ -111,7 +132,12 @@ public class Parser extends BaseDanmakuParser {
                 if (source.startsWith("https") && isSslError(th)) {
                     try {
                         LOG.i("echo-danmu ssl verify failed, retry unsafe ssl");
+                        if (isCancelled()) return "";
                         okhttp3.Response response = executeUnsafeHttp(source);
+                        if (isCancelled()) {
+                            response.close();
+                            return "";
+                        }
                         String content = readBody(response);
                         LOG.i("echo-danmu unsafe ssl http code: " + response.code()
                                 + ", encoding: " + response.header("Content-Encoding", "")
@@ -126,6 +152,10 @@ public class Parser extends BaseDanmakuParser {
             }
         }
         return source;
+    }
+
+    private boolean isCancelled() {
+        return cancelChecker != null && cancelChecker.isCancelled();
     }
 
     private static OkHttpClient buildHttpClient(boolean unsafeSsl) {
