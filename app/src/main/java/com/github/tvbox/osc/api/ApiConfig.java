@@ -1387,9 +1387,7 @@ public class ApiConfig {
     public List<SourceBean> getSwitchSourceBeanList() {
         List<SourceBean> filteredList = new ArrayList<>();
         for (SourceBean bean : sourceBeanList.values()) {
-            if (bean.getFilterable() == 1) {
-                filteredList.add(bean);
-            }
+            filteredList.add(bean);
         }
         return filteredList;
     }
