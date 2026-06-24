@@ -110,6 +110,10 @@ public class PythonSpider extends Spider {
         }
     }
 
+    public boolean isLoadSuccess() {
+        return loadSuccess && pySpider != null;
+    }
+
     public JSONObject map2json(HashMap<String, String> extend) {
         JSONObject jo = new JSONObject();
         try {
@@ -210,6 +214,7 @@ public class PythonSpider extends Spider {
      * @return
      */
     public String homeContent(boolean filter) {
+        if (pySpider == null) return "{}";
         PyLog.nw("homeContent" + "-" + name, paramLog(filter));
         PyObject po = app.callAttr("homeContent", pySpider, filter);
         String rsp = po.toString();

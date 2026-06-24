@@ -13,6 +13,7 @@ import com.github.tvbox.osc.util.LOG;
 import com.undcover.freedom.pyramid.PythonLoader;
 import com.undcover.freedom.pyramid.PythonSpider;
 import java.io.UnsupportedEncodingException;
+import java.net.URLEncoder;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -62,6 +63,8 @@ public class pyLoader implements IPyLoader {
             }
             Log.i("PyLoader", "echo-getSpider url: " + getPyUrl(cls, ext));
             Spider sp = pythonLoader.getSpider(key, getPyUrl(cls, ext));
+            if (sp == null) return new SpiderNull();
+            if (sp instanceof SpiderNull) return sp;
 //            Log.i("PyLoader", "echo-getSpider homeContent: " + sp.homeContent(true));
             spiders.put(key, sp);
             Log.i("PyLoader", "echo-getSpider 加载spider: " + key);
@@ -96,7 +99,7 @@ public class pyLoader implements IPyLoader {
     private String getPyUrl(String api, String ext) throws UnsupportedEncodingException {
         StringBuilder urlBuilder = new StringBuilder(api);
         if (!ext.isEmpty()) {
-//            ext= URLEncoder.encode(ext,"utf8");
+            ext = URLEncoder.encode(ext, "UTF-8");
             urlBuilder.append(api.contains("?") ? "&" : "?").append("extend=").append(ext);
         }
         return urlBuilder.toString();

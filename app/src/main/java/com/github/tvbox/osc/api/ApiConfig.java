@@ -346,6 +346,10 @@ public class ApiConfig {
         if (apiUrl.contains(".txt") || apiUrl.contains(".m3u") || apiUrl.contains("=txt") || apiUrl.contains("=m3u")) {
             initLiveSettings();
             parseLiveJson(apiUrl, defaultLiveObjString.replace("txt_m3u_url", liveApiConfigUrl));
+            if (!hasLiveConfigResult()) {
+                callback.error("直播配置解析失败");
+                return;
+            }
             callback.success();
             return;
         }
@@ -354,8 +358,10 @@ public class ApiConfig {
         if (useCache && live_cache.exists()) {
             try {
                 parseLiveJson(apiUrl, live_cache);
-                callback.success();
-                return;
+                if (hasLiveConfigResult()) {
+                    callback.success();
+                    return;
+                }
             } catch (Throwable th) {
                 th.printStackTrace();
             }
@@ -369,10 +375,15 @@ public class ApiConfig {
                         try {
                             String json = response.body();
                             parseLiveJson(apiUrl, json);
+                            if (!hasLiveConfigResult()) {
+                                callback.error("直播配置解析失败");
+                                return;
+                            }
                             FileUtils.saveCache(live_cache, json);
                             callback.success();
                         } catch (Throwable th) {
                             th.printStackTrace();
+                            callback.error("直播配置解析失败");
                         }
                     }
 
@@ -382,11 +393,15 @@ public class ApiConfig {
                         if (live_cache.exists()) {
                             try {
                                 parseLiveJson(apiUrl, live_cache);
-                                callback.success();
+                                if (hasLiveConfigResult()) {
+                                    callback.success();
+                                    return;
+                                }
                             } catch (Throwable th) {
                                 th.printStackTrace();
                             }
                         }
+                        callback.error("直播配置拉取失败");
                     }
 
                     public String convertResponse(okhttp3.Response response) throws Throwable {
@@ -403,6 +418,10 @@ public class ApiConfig {
                         return result;
                     }
         });
+    }
+
+    private boolean hasLiveConfigResult() {
+        return liveChannelGroupList != null && !liveChannelGroupList.isEmpty();
     }
 
     public static String getLiveGroupIndexKey() {
@@ -911,6 +930,7 @@ public class ApiConfig {
 
     private String liveSpider="";
     private void parseLiveJson(String apiUrl, String jsonStr) {
+        liveChannelGroupList.clear();
         JsonObject infoJson = gson.fromJson(jsonStr, JsonObject.class);
         // spider
         liveSpider = DefaultConfig.safeJsonString(infoJson, "spider", "");
@@ -1142,6 +1162,7 @@ public class ApiConfig {
     public void loadLiveApi(JsonObject livesOBJ) {
         try {
             LOG.i("echo-loadLiveApi");
+            liveChannelGroupList.clear();
             currentLiveSpider = "";
             currentLivePyKey = "";
             String lives = livesOBJ.toString();
@@ -1163,10 +1184,11 @@ public class ApiConfig {
                     url = url.replace(extUrl, extUrlFix);
                 }
             } else {
-                String type= livesOBJ.get("type").getAsString();
+                String api = livesOBJ.has("api") ? livesOBJ.get("api").getAsString().trim() : "";
+                String type = livesOBJ.has("type") ? livesOBJ.get("type").getAsString() : (isLiveSpiderApi(api) ? "3" : "0");
                 if(type.equals("0") || type.equals("3")){
                     url = livesOBJ.has("url")?livesOBJ.get("url").getAsString():"";
-                    if(url.isEmpty())url=livesOBJ.has("api")?livesOBJ.get("api").getAsString():"";
+                    if(url.isEmpty())url=api;
                     LOG.i("echo-liveurl"+url);
                     if(!url.startsWith("http://127.0.0.1")){
                         if(url.startsWith("http")){
@@ -1176,9 +1198,8 @@ public class ApiConfig {
                     }
                     if(type.equals("3")){
                         String jarUrl = livesOBJ.has("jar")?livesOBJ.get("jar").getAsString().trim():"";
-                        String pyApi = livesOBJ.has("api")?livesOBJ.get("api").getAsString().trim():"";
-                        LOG.i("echo-pyApi1"+pyApi);
-                        if(pyApi.contains(".py")){
+                        LOG.i("echo-liveApi1"+api);
+                        if(api.contains(".py")){
                             LOG.i("echo-pyLoader.getSpider");
                             String ext="";
                             if(livesOBJ.has("ext") && (livesOBJ.get("ext").isJsonObject() || livesOBJ.get("ext").isJsonArray())){
@@ -1187,16 +1208,26 @@ public class ApiConfig {
                                 ext=DefaultConfig.safeJsonString(livesOBJ, "ext", "");
                             }
 
-                            currentLivePyKey = MD5.string2MD5(pyApi);
-                            currentLiveSpider = pyApi;
-                            pyLoader.getSpider(currentLivePyKey,pyApi,ext);
+                            currentLivePyKey = MD5.string2MD5(api);
+                            currentLiveSpider = api;
+                            pyLoader.getSpider(currentLivePyKey,api,ext);
+                        } else if (api.contains(".js")) {
+                            LOG.i("echo-jsLoader.getSpider");
+                            String ext="";
+                            if(livesOBJ.has("ext") && (livesOBJ.get("ext").isJsonObject() || livesOBJ.get("ext").isJsonArray())){
+                                ext=livesOBJ.get("ext").toString();
+                            }else {
+                                ext=DefaultConfig.safeJsonString(livesOBJ, "ext", "");
+                            }
+                            currentLiveSpider = api;
+                            jsLoader.getSpider(MD5.string2MD5(api), api, ext, jarUrl);
                         }
-                        if(!jarUrl.isEmpty()){
+                        if(!jarUrl.isEmpty() && !isLiveSpiderApi(api)){
                             jarLoader.loadLiveJar(jarUrl);
                             if (TextUtils.isEmpty(currentLiveSpider)) {
                                 currentLiveSpider = jarUrl;
                             }
-                        }else if(!liveSpider.isEmpty()){
+                        }else if(!liveSpider.isEmpty() && !isLiveSpiderApi(api)){
                             jarLoader.loadLiveJar(liveSpider);
                             if (TextUtils.isEmpty(currentLiveSpider)) {
                                 currentLiveSpider = liveSpider;
@@ -1223,6 +1254,10 @@ public class ApiConfig {
                 Hawk.put(HawkConfig.LIVE_PLAY_TYPE,Hawk.get(HawkConfig.PLAY_TYPE, 0));
             }
             //设置UA
+            if(livesOBJ.has("timeout")){
+                int timeout = Math.max(5, Math.min(30, livesOBJ.get("timeout").getAsInt()));
+                Hawk.put(HawkConfig.LIVE_CONNECT_TIMEOUT, (timeout + 4) / 5 - 1);
+            }
             if(livesOBJ.has("header")) {
                 JsonObject headerObj = livesOBJ.getAsJsonObject("header");
                 HashMap<String, String> liveHeader = new HashMap<>();
@@ -1254,6 +1289,8 @@ public class ApiConfig {
             currentLivePyKey = MD5.string2MD5(liveJar);
             pyLoader.getSpider(currentLivePyKey, liveJar, "");
             pyLoader.setRecentPyKey(currentLivePyKey);
+        }else if(liveJar.contains(".js")){
+            jsLoader.getSpider(MD5.string2MD5(liveJar), liveJar, "", "");
         }else {
             String jarUrl=!liveJar.isEmpty()?liveJar:liveSpider;
             jarLoader.setRecentJarKey(MD5.string2MD5(jarUrl));
@@ -1291,6 +1328,23 @@ public class ApiConfig {
         return pyLoader.getSpider(currentLivePyKey, url, "");
     }
 
+    public Spider getJsCSP(String url) {
+        currentLiveSpider = url;
+        return jsLoader.getSpider(MD5.string2MD5(url), url, "", "");
+    }
+
+    public Spider getLiveCSP(String url) {
+        return url.contains(".js") ? getJsCSP(url) : getPyCSP(url);
+    }
+
+    public int getLiveConnectTimeoutSeconds() {
+        return (Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1) + 1) * 5;
+    }
+
+    private boolean isLiveSpiderApi(String api) {
+        return api.contains(".py") || api.contains(".js");
+    }
+
     public Object[] proxyLocal(Map<String, String> param) {
         if ("js".equals(param.get("do"))) {
             return jsLoader.proxyInvoke(param);
@@ -1299,6 +1353,9 @@ public class ApiConfig {
             String liveApi = currentLiveSpider != null ? currentLiveSpider : "";
             if (liveApi.contains(".py")) {
                 return pyLoader.proxyInvoke(param, currentLivePyKey);
+            }
+            if (liveApi.contains(".js")) {
+                return jsLoader.proxyInvoke(param);
             }
             return jarLoader.proxyInvoke(param);
         }

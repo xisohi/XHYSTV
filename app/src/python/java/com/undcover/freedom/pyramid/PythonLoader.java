@@ -155,6 +155,7 @@ public class PythonLoader {
             future.get(30, TimeUnit.SECONDS);
 
             // 任务成功，缓存并返回
+            if (!sp.isLoadSuccess()) return new SpiderNull();
             spiders.put(key, sp);
             return sp;
         } catch (TimeoutException e) {
