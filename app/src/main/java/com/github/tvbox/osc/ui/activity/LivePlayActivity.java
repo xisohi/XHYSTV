@@ -115,6 +115,7 @@ import java.util.regex.Pattern;
 import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 
+import xyz.doikki.videoplayer.exo.ExoMediaSourceHelper;
 import xyz.doikki.videoplayer.player.VideoView;
 
 /**
@@ -170,6 +171,9 @@ public class LivePlayActivity extends BaseActivity {
     private int currentLiveChangeSourceTimes = 0;
     private boolean allowLiveSwitchPlayer = true;
     private LiveChannelItem currentLiveChannelItem = null;
+    private String pendingLiveRefreshChannelName = null;
+    private int pendingLiveRefreshSourceIndex = -1;
+    private boolean refreshingLiveChannelList = false;
     private LivePlayerManager livePlayerManager = new LivePlayerManager();
     private ArrayList<Integer> channelGroupPasswordConfirmed = new ArrayList<>();
 
@@ -1535,8 +1539,14 @@ public class LivePlayActivity extends BaseActivity {
     private Boolean hasCatchup=false;
     private String logoUrl=null;
     private void initLiveObj(){
+        catchup = null;
+        hasCatchup = false;
+        logoUrl = null;
         int position=ApiConfig.getLiveGroupIndex();
         JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
+        if (live_groups == null || live_groups.size() == 0 || position < 0 || position >= live_groups.size()) {
+            return;
+        }
         JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
         String type = livesOBJ.has("type")?livesOBJ.get("type").getAsString():"0";
 
@@ -1581,6 +1591,9 @@ public class LivePlayActivity extends BaseActivity {
         if (liveHeader != null) header.putAll(liveHeader);
         if (currentLiveChannelItem.getHeaders() != null) {
             header.putAll(currentLiveChannelItem.getHeaders());
+        }
+        if (!currentLiveChannelItem.getChannelFormat().isEmpty()) {
+            header.put(ExoMediaSourceHelper.HEADER_FORMAT, currentLiveChannelItem.getChannelFormat());
         }
         if (header.isEmpty()) return null;
         return header;
@@ -2553,27 +2566,24 @@ public class LivePlayActivity extends BaseActivity {
                 break;
             case 5://多源切换
                 //TODO
-                if (mVideoView != null) {
-                    mVideoView.release();
-                    mVideoView=null;
-                }
                 if(position==ApiConfig.getLiveGroupIndex())break;
+                String currentChannelName = getPreferredLiveRefreshChannelName();
+                int currentSourceIndex = getPreferredLiveRefreshSourceIndex();
                 JsonArray live_groups=Hawk.get(HawkConfig.LIVE_GROUP_LIST,new JsonArray());
+                if (live_groups == null || position >= live_groups.size()) break;
                 JsonObject livesOBJ = live_groups.get(position).getAsJsonObject();
                 liveSettingItemAdapter.selectItem(position, true, true);
                 ApiConfig.setLiveGroupIndex(position);
                 ApiConfig.get().loadLiveApi(livesOBJ);
-                recreate();
-                return;
+                refreshLiveChannelListAndPlay(currentChannelName, currentSourceIndex);
+                break;
             case 6://配置切换
                 ArrayList<String> history = Hawk.get(HawkConfig.LIVE_API_HISTORY, new ArrayList<String>());
                 if (history.isEmpty() || position < 0 || position >= history.size()) break;
                 String value = history.get(position);
                 String oldLiveApi = Hawk.get(HawkConfig.LIVE_API_URL, "");
-                if (mVideoView != null) {
-                    mVideoView.release();
-                    mVideoView = null;
-                }
+                String oldChannelName = getPreferredLiveRefreshChannelName();
+                int oldSourceIndex = getPreferredLiveRefreshSourceIndex();
                 liveSettingItemAdapter.selectItem(position, true, true);
                 if (value.equals(oldLiveApi)) break;
                 Hawk.put(HawkConfig.LIVE_API_URL, value);
@@ -2585,7 +2595,7 @@ public class LivePlayActivity extends BaseActivity {
                         mHandler.post(new Runnable() {
                             @Override
                             public void run() {
-                                recreate();
+                                refreshLiveChannelListAndPlay(oldChannelName, oldSourceIndex);
                             }
                         });
                     }
@@ -2619,6 +2629,42 @@ public class LivePlayActivity extends BaseActivity {
         mHandler.postDelayed(mHideSettingLayoutRun, postTimeout);
     }
 
+    private String getPreferredLiveRefreshChannelName() {
+        if (currentLiveChannelItem != null) return currentLiveChannelItem.getChannelName();
+        return Hawk.get(HawkConfig.LIVE_CHANNEL, "");
+    }
+
+    private int getPreferredLiveRefreshSourceIndex() {
+        if (currentLiveChannelItem != null) return currentLiveChannelItem.getSourceIndex();
+        return -1;
+    }
+
+    private void refreshLiveChannelListAndPlay(String channelName, int sourceIndex) {
+        refreshingLiveChannelList = true;
+        pendingLiveRefreshChannelName = channelName;
+        pendingLiveRefreshSourceIndex = sourceIndex;
+        currentLiveLookBackIndex = -1;
+        currentLiveChangeSourceTimes = 0;
+        allowLiveSwitchPlayer = true;
+        channelGroupPasswordConfirmed.clear();
+        mHandler.removeCallbacks(mConnectTimeoutChangeSourceRun);
+        mHandler.removeCallbacks(mLoadEpgRun);
+        hideSwitchChannelSnapshot();
+        if (tvLeftChannelListLayout != null) tvLeftChannelListLayout.setVisibility(View.INVISIBLE);
+        if (tvRightSettingLayout != null) tvRightSettingLayout.setVisibility(View.INVISIBLE);
+        if (liveChannelGroupAdapter != null) {
+            liveChannelGroupAdapter.setFocusedGroupIndex(-1);
+            liveChannelGroupAdapter.setSelectedGroupIndex(-1);
+        }
+        if (liveChannelItemAdapter != null) {
+            liveChannelItemAdapter.setFocusedChannelIndex(-1);
+            liveChannelItemAdapter.setSelectedChannelIndex(-1);
+            liveChannelItemAdapter.setNewData(new ArrayList<LiveChannelItem>());
+        }
+        initLiveChannelList();
+        initLiveSettingGroupList();
+    }
+
     private int getCurrentLiveApiHistoryIndex() {
         ArrayList<String> history = Hawk.get(HawkConfig.LIVE_API_HISTORY, new ArrayList<String>());
         if (history.isEmpty()) return -1;
@@ -2630,7 +2676,7 @@ public class LivePlayActivity extends BaseActivity {
     private void initLiveChannelList() {
         List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
         if (list.isEmpty()) {
-            setDefaultLiveChannelList();
+            setEmptyLiveChannelList();
             return;
         }
         initLiveObj();
@@ -2650,11 +2696,13 @@ public class LivePlayActivity extends BaseActivity {
             url = new String(Base64.decode(parsedUrl.getQueryParameter("ext"), Base64.DEFAULT | Base64.URL_SAFE | Base64.NO_WRAP), "UTF-8");
         } catch (Throwable th) {
             if (!url.startsWith("http://127.0.0.1")) {
-                setDefaultLiveChannelList();
+                setEmptyLiveChannelList();
                 return;
             }
         }
-        showLoading();
+        if (!refreshingLiveChannelList) {
+            showLoading();
+        }
 
         LOG.i("echo-live-url:"+url);
 
@@ -2662,7 +2710,7 @@ public class LivePlayActivity extends BaseActivity {
             if (!hasPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
                 // 权限不足时，直接设置默认播放列表
                 Toast.makeText(App.getInstance(), "该源需要存储权限", Toast.LENGTH_SHORT).show();
-                setDefaultLiveChannelList();
+                setEmptyLiveChannelList();
                 return;
             }
             String finalUrl = url;
@@ -2694,7 +2742,7 @@ public class LivePlayActivity extends BaseActivity {
                             mHandler.post(new Runnable() {
                                 @Override
                                 public void run() {
-                                    setDefaultLiveChannelList();
+                                    setEmptyLiveChannelList();
                                 }
                             });
                             return;
@@ -2707,7 +2755,7 @@ public class LivePlayActivity extends BaseActivity {
                             mHandler.post(new Runnable() {
                                 @Override
                                 public void run() {
-                                    setDefaultLiveChannelList();
+                                    setEmptyLiveChannelList();
                                 }
                             });
                             return;
@@ -2750,7 +2798,7 @@ public class LivePlayActivity extends BaseActivity {
                         mHandler.post(new Runnable() {
                             @Override
                             public void run() {
-                                setDefaultLiveChannelList();
+                                setEmptyLiveChannelList();
                             }
                         });
                         return;
@@ -2772,7 +2820,7 @@ public class LivePlayActivity extends BaseActivity {
                     mHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            setDefaultLiveChannelList();
+                            setEmptyLiveChannelList();
                         }
                     });
                 }
@@ -2781,10 +2829,15 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private void initLiveState() {
-        String lastChannelName = Hawk.get(HawkConfig.LIVE_CHANNEL, "");
+        refreshingLiveChannelList = false;
+        String lastChannelName = pendingLiveRefreshChannelName == null ? Hawk.get(HawkConfig.LIVE_CHANNEL, "") : pendingLiveRefreshChannelName;
+        int sourceIndex = pendingLiveRefreshSourceIndex;
+        pendingLiveRefreshChannelName = null;
+        pendingLiveRefreshSourceIndex = -1;
 
         int lastChannelGroupIndex = -1;
         int lastLiveChannelIndex = -1;
+        LiveChannelItem lastLiveChannelItem = null;
         for (LiveChannelGroup liveChannelGroup : liveChannelGroupList) {
             ArrayList<LiveChannelItem> groupChannels = liveChannelGroup.getLiveChannels();
             if (groupChannels == null || groupChannels.isEmpty()) {
@@ -2794,6 +2847,7 @@ public class LivePlayActivity extends BaseActivity {
                 if (liveChannelItem.getChannelName().equals(lastChannelName)) {
                     lastChannelGroupIndex = liveChannelGroup.getGroupIndex();
                     lastLiveChannelIndex = liveChannelItem.getChannelIndex();
+                    lastLiveChannelItem = liveChannelItem;
                     break;
                 }
             }
@@ -2805,6 +2859,9 @@ public class LivePlayActivity extends BaseActivity {
                 lastChannelGroupIndex = 0;
             lastLiveChannelIndex = 0;
         }
+        if (lastLiveChannelItem != null && sourceIndex >= 0 && lastLiveChannelItem.getSourceNum() > 0) {
+            lastLiveChannelItem.setSourceIndex(Math.min(sourceIndex, lastLiveChannelItem.getSourceNum() - 1));
+        }
 
         livePlayerManager.init(mVideoView);
         showTime();
@@ -2813,6 +2870,7 @@ public class LivePlayActivity extends BaseActivity {
         tvRightSettingLayout.setVisibility(View.INVISIBLE);
 
         liveChannelGroupAdapter.setNewData(liveChannelGroupList);
+        currentLiveChannelIndex = -1;
         selectChannelGroup(lastChannelGroupIndex, false, lastLiveChannelIndex);
     }
 
@@ -2822,13 +2880,17 @@ public class LivePlayActivity extends BaseActivity {
 
     private void initLiveSettingGroupList() {
         liveSettingGroupList=ApiConfig.get().getLiveSettingGroupList();
+        if (liveSettingGroupList.size() < 7) return;
         liveSettingGroupList.get(3).getLiveSettingItems().get(Hawk.get(HawkConfig.LIVE_CONNECT_TIMEOUT, 1)).setItemSelected(true);
         liveSettingGroupList.get(4).getLiveSettingItems().get(0).setItemSelected(Hawk.get(HawkConfig.LIVE_SHOW_TIME, false));
         liveSettingGroupList.get(4).getLiveSettingItems().get(1).setItemSelected(Hawk.get(HawkConfig.LIVE_SHOW_NET_SPEED, false));
         liveSettingGroupList.get(4).getLiveSettingItems().get(2).setItemSelected(Hawk.get(HawkConfig.LIVE_SHOW_RESOLUTION, false));
         liveSettingGroupList.get(4).getLiveSettingItems().get(3).setItemSelected(Hawk.get(HawkConfig.LIVE_CHANNEL_REVERSE, false));
         liveSettingGroupList.get(4).getLiveSettingItems().get(4).setItemSelected(Hawk.get(HawkConfig.LIVE_CROSS_GROUP, false));
-        liveSettingGroupList.get(5).getLiveSettingItems().get(ApiConfig.getLiveGroupIndex()).setItemSelected(true);
+        int liveGroupIndex = ApiConfig.getLiveGroupIndex();
+        if (liveGroupIndex >= 0 && liveGroupIndex < liveSettingGroupList.get(5).getLiveSettingItems().size()) {
+            liveSettingGroupList.get(5).getLiveSettingItems().get(liveGroupIndex).setItemSelected(true);
+        }
     }
 
     private void loadCurrentSourceList() {
@@ -3271,30 +3333,24 @@ public class LivePlayActivity extends BaseActivity {
     /**
      * 当播放列表为空或加载失败时，设置一个默认的播放列表，保证播放界面不会崩溃
      */
-    private void setDefaultLiveChannelList() {
+    private void setEmptyLiveChannelList() {
+        refreshingLiveChannelList = false;
+        pendingLiveRefreshChannelName = null;
+        pendingLiveRefreshSourceIndex = -1;
         liveChannelGroupList.clear();
-        // 创建默认直播分组
-        LiveChannelGroup defaultGroup = new LiveChannelGroup();
-        defaultGroup.setGroupIndex(0);
-        defaultGroup.setGroupName("default group");
-        defaultGroup.setGroupPassword("");
-        LiveChannelItem defaultChannel = new LiveChannelItem();
-        defaultChannel.setChannelName("default channel");
-        defaultChannel.setChannelIndex(0);
-        defaultChannel.setChannelNum(1);
-        ArrayList<String> defaultSourceNames = new ArrayList<>();
-        ArrayList<String> defaultSourceUrls = new ArrayList<>();
-        defaultSourceNames.add("default source");
-        defaultSourceUrls.add("http://default.play.url/stream");
-        defaultChannel.setChannelSourceNames(defaultSourceNames);
-        defaultChannel.setChannelUrls(defaultSourceUrls);
-        // 将默认频道添加到分组内
-        ArrayList<LiveChannelItem> channels = new ArrayList<>();
-        channels.add(defaultChannel);
-        defaultGroup.setLiveChannels(channels);
-        // 添加分组到全局列表
-        liveChannelGroupList.add(defaultGroup);
         showSuccess();
-        initLiveState();
+        if (liveChannelGroupAdapter != null) {
+            liveChannelGroupAdapter.setFocusedGroupIndex(-1);
+            liveChannelGroupAdapter.setSelectedGroupIndex(-1);
+            liveChannelGroupAdapter.setNewData(liveChannelGroupList);
+        }
+        if (liveChannelItemAdapter != null) {
+            liveChannelItemAdapter.setFocusedChannelIndex(-1);
+            liveChannelItemAdapter.setSelectedChannelIndex(-1);
+            liveChannelItemAdapter.setNewData(new ArrayList<LiveChannelItem>());
+        }
+        if (tvLeftChannelListLayout != null) tvLeftChannelListLayout.setVisibility(View.INVISIBLE);
+        if (tvRightSettingLayout != null) tvRightSettingLayout.setVisibility(View.INVISIBLE);
+        Toast.makeText(App.getInstance(), "源异常,请切换到其他源", Toast.LENGTH_SHORT).show();
     }
 }

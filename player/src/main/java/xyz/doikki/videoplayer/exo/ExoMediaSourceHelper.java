@@ -29,6 +29,7 @@ import java.util.Map;
 import okhttp3.OkHttpClient;
 
 public final class ExoMediaSourceHelper {
+    public static final String HEADER_FORMAT = "TVBox-Format";
 
     private static ExoMediaSourceHelper sInstance;
 
@@ -72,6 +73,14 @@ public final class ExoMediaSourceHelper {
     }
 
     public MediaSource getMediaSource(String uri, Map<String, String> headers, boolean isCache) {
+        return getMediaSource(uri, headers, isCache, inferContentType(uri, headers));
+    }
+
+    public MediaSource getHlsMediaSource(String uri, Map<String, String> headers) {
+        return getMediaSource(uri, headers, false, C.TYPE_HLS);
+    }
+
+    private MediaSource getMediaSource(String uri, Map<String, String> headers, boolean isCache, int contentType) {
         Uri contentUri = Uri.parse(uri);
         if ("rtmp".equals(contentUri.getScheme())) {
             return new ProgressiveMediaSource.Factory(new RtmpDataSourceFactory(null))
@@ -79,7 +88,6 @@ public final class ExoMediaSourceHelper {
         } else if ("rtsp".equals(contentUri.getScheme())) {
             return new RtspMediaSource.Factory().createMediaSource(MediaItem.fromUri(contentUri));
         }
-        int contentType = inferContentType(uri);
         DataSource.Factory factory;
         if (isCache) {
             factory = getCacheDataSourceFactory();
@@ -102,15 +110,37 @@ public final class ExoMediaSourceHelper {
         }
     }
 
-    private int inferContentType(String fileName) {
+    private int inferContentType(String fileName, Map<String, String> headers) {
+        int formatType = inferFormatContentType(headers);
+        if (formatType != C.TYPE_OTHER) {
+            return formatType;
+        }
         fileName = fileName.toLowerCase();
-        if (fileName.contains(".mpd") || fileName.contains("type=mpd")) {
+        if (fileName.contains(".mpd") || fileName.contains("type=mpd") || fileName.contains("type=dash") || fileName.contains("format=mpd") || fileName.contains("format=dash")) {
             return C.TYPE_DASH;
         } else if (isHlsUri(fileName)) {
             return C.TYPE_HLS;
         } else {
             return C.TYPE_OTHER;
         }
+    }
+
+    private int inferFormatContentType(Map<String, String> headers) {
+        if (headers == null || !headers.containsKey(HEADER_FORMAT)) {
+            return C.TYPE_OTHER;
+        }
+        String format = headers.remove(HEADER_FORMAT);
+        if (format == null) {
+            return C.TYPE_OTHER;
+        }
+        format = format.trim().toLowerCase();
+        if (format.equals("hls") || format.contains("mpegurl") || format.contains("m3u8")) {
+            return C.TYPE_HLS;
+        }
+        if (format.equals("dash") || format.equals("mpd") || format.contains("dash+xml")) {
+            return C.TYPE_DASH;
+        }
+        return C.TYPE_OTHER;
     }
 
     private boolean isHlsUri(String uri) {
@@ -176,6 +206,7 @@ public final class ExoMediaSourceHelper {
 
     private void setHeaders(Map<String, String> headers) {
         if (headers != null && headers.size() > 0) {
+            headers.remove(HEADER_FORMAT);
             //如果发现用户通过header传递了UA，则强行将HttpDataSourceFactory里面的userAgent字段替换成用户的
             if (headers.containsKey("User-Agent")) {
                 String value = headers.remove("User-Agent");
