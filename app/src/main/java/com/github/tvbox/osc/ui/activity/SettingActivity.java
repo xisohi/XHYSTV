@@ -45,7 +45,6 @@ public class SettingActivity extends BaseActivity {
     private String homeSourceKey;
     private String currentApi;
     private int homeRec;
-    private int dnsOpt;
     private String currentLiveApi;
 
     @Override
@@ -110,7 +109,6 @@ public class SettingActivity extends BaseActivity {
         currentApi = Hawk.get(HawkConfig.API_URL, "");
         homeSourceKey = ApiConfig.get().getHomeSourceBean().getKey();
         homeRec = Hawk.get(HawkConfig.HOME_REC, 0);
-        dnsOpt = Hawk.get(HawkConfig.DOH_URL, 0);
         currentLiveApi = Hawk.get(HawkConfig.LIVE_API_URL, "");
         List<String> sortList = new ArrayList<>();
         sortList.add("设置其他");
@@ -180,11 +178,7 @@ public class SettingActivity extends BaseActivity {
     @Override
     public void onBackPressed() {
         if (currentApi.equals(Hawk.get(HawkConfig.API_URL, ""))) {
-            if(dnsOpt != Hawk.get(HawkConfig.DOH_URL, 0)){
-                AppManager.getInstance().finishAllActivity();
-                jumpActivity(HomeActivity.class);
-            }
-            else if ((homeSourceKey != null && !homeSourceKey.equals(Hawk.get(HawkConfig.HOME_API, "")))  || homeRec != Hawk.get(HawkConfig.HOME_REC, 0)) {
+            if ((homeSourceKey != null && !homeSourceKey.equals(Hawk.get(HawkConfig.HOME_API, "")))  || homeRec != Hawk.get(HawkConfig.HOME_REC, 0)) {
                 jumpActivity(HomeActivity.class, createBundle());
             }else if(!currentLiveApi.equals(Hawk.get(HawkConfig.LIVE_API_URL, ""))){
                 jumpActivity(HomeActivity.class);
