@@ -372,6 +372,10 @@ public class JarLoader {
     }
 
     public Spider getSpider(String key, String cls, String ext, String jar) {
+        key = key == null ? "" : key;
+        cls = cls == null ? "" : cls;
+        ext = ext == null ? "" : ext;
+        jar = jar == null ? "" : jar;
         if (spiders.containsKey(key)) {
             String jarKey = getJarKey(jar);
             recentJarKey = jarKey;
@@ -380,6 +384,10 @@ public class JarLoader {
             Log.i("JarLoader", "echo-getSpider spider缓存: " + key);
             ensureDefaultConfig();
             return spiders.get(key);
+        }
+        if (cls.isEmpty()) {
+            Log.i("JarLoader", "echo-getSpider empty class key=" + key);
+            return new SpiderNull();
         }
         String clsKey = cls.replace("csp_", "");
         String jarUrl = "";
@@ -415,7 +423,7 @@ public class JarLoader {
             spiders.put(key, sp);
             return sp;
         } catch (Throwable th) {
-            Log.i("JarLoader", "echo-getSpider error key=" + key + ", clsKey=" + clsKey + ", msg=" + th.getMessage());
+            Log.i("JarLoader", "echo-getSpider error key=" + key + ", clsKey=" + clsKey + ", extEmpty=" + ext.isEmpty() + ", msg=" + th.getMessage());
             th.printStackTrace();
         }
         return new SpiderNull();

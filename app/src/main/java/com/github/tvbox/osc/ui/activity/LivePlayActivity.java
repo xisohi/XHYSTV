@@ -1749,11 +1749,17 @@ public class LivePlayActivity extends BaseActivity {
             //重新载入默认状态
             ApiConfig.get().refreshLiveApiHistoryItems();
             loadCurrentSourceList();
-            liveSettingGroupAdapter.setNewData(liveSettingGroupList);
+            liveSettingGroupAdapter.setNewData(getVisibleLiveSettingGroupList());
             liveSettingGroupAdapter.setSelectedGroupIndex(-1);
-            selectSettingGroup(0, false);
-            mSettingGroupView.scrollToPosition(0);
-            mSettingItemView.scrollToPosition(currentLiveChannelItem == null ? 0 : currentLiveChannelItem.getSourceIndex());
+            int settingGroupIndex = getDefaultSettingGroupIndex();
+            selectSettingGroup(settingGroupIndex, false);
+            int settingGroupPosition = liveSettingGroupAdapter.findPositionByGroupIndex(settingGroupIndex);
+            mSettingGroupView.scrollToPosition(settingGroupPosition < 0 ? 0 : settingGroupPosition);
+            int settingItemIndex = currentLiveChannelItem == null ? 0 : currentLiveChannelItem.getSourceIndex();
+            if (liveSettingItemAdapter.getData().isEmpty() || settingItemIndex < 0 || settingItemIndex >= liveSettingItemAdapter.getData().size()) {
+                settingItemIndex = 0;
+            }
+            mSettingItemView.scrollToPosition(settingItemIndex);
             mHandler.postDelayed(mFocusAndShowSettingGroup, 50);
         } else {
             mHandler.removeCallbacks(mHideSettingLayoutRun);
@@ -1767,7 +1773,9 @@ public class LivePlayActivity extends BaseActivity {
             if (mSettingGroupView.isScrolling() || mSettingItemView.isScrolling() || mSettingGroupView.isComputingLayout() || mSettingItemView.isComputingLayout()) {
                 mHandler.postDelayed(this, 100);
             } else {
-                RecyclerView.ViewHolder holder = mSettingGroupView.findViewHolderForAdapterPosition(0);
+                int settingGroupIndex = getDefaultSettingGroupIndex();
+                int settingGroupPosition = liveSettingGroupAdapter.findPositionByGroupIndex(settingGroupIndex);
+                RecyclerView.ViewHolder holder = mSettingGroupView.findViewHolderForAdapterPosition(settingGroupPosition < 0 ? 0 : settingGroupPosition);
                 if (holder != null)
                     holder.itemView.requestFocus();
                 tvRightSettingLayout.setVisibility(View.VISIBLE);
@@ -2414,7 +2422,7 @@ public class LivePlayActivity extends BaseActivity {
 
             @Override
             public void onItemSelected(TvRecyclerView parent, View itemView, int position) {
-                selectSettingGroup(position, true);
+                selectVisibleSettingGroup(position, true);
             }
 
             @Override
@@ -2427,9 +2435,14 @@ public class LivePlayActivity extends BaseActivity {
             @Override
             public void onItemClick(BaseQuickAdapter adapter, View view, int position) {
                 FastClickCheckUtil.check(view);
-                selectSettingGroup(position, false);
+                selectVisibleSettingGroup(position, false);
             }
         });
+    }
+
+    private void selectVisibleSettingGroup(int position, boolean focus) {
+        if (position < 0 || position >= liveSettingGroupAdapter.getData().size()) return;
+        selectSettingGroup(liveSettingGroupAdapter.getData().get(position).getGroupIndex(), focus);
     }
 
     private void selectSettingGroup(int position, boolean focus) {
@@ -2713,6 +2726,10 @@ public class LivePlayActivity extends BaseActivity {
                 return;
             }
         }
+        if (!isValidLiveProxyUrl(url)) {
+            setEmptyLiveChannelList();
+            return;
+        }
         if (!refreshingLiveChannelList) {
             showLoading();
         }
@@ -2840,6 +2857,16 @@ public class LivePlayActivity extends BaseActivity {
         }
     }
 
+    private boolean isValidLiveProxyUrl(String url) {
+        if (TextUtils.isEmpty(url)) return false;
+        String lowerUrl = url.trim().toLowerCase(Locale.US);
+        return lowerUrl.startsWith("http://")
+                || lowerUrl.startsWith("https://")
+                || lowerUrl.startsWith("rtsp://")
+                || lowerUrl.startsWith("rtmp://")
+                || lowerUrl.startsWith("rtp://");
+    }
+
     private void initLiveState() {
         refreshingLiveChannelList = false;
         String lastChannelName = pendingLiveRefreshChannelName == null ? Hawk.get(HawkConfig.LIVE_CHANNEL, "") : pendingLiveRefreshChannelName;
@@ -2888,6 +2915,32 @@ public class LivePlayActivity extends BaseActivity {
 
     private boolean isListOrSettingLayoutVisible() {
         return tvLeftChannelListLayout.getVisibility() == View.VISIBLE || tvRightSettingLayout.getVisibility() == View.VISIBLE;
+    }
+
+    private boolean hasCurrentLiveChannelSource() {
+        return currentLiveChannelItem != null
+                && currentLiveChannelItem.getChannelUrls() != null
+                && currentLiveChannelItem.getSourceNum() > 0
+                && currentLiveChannelItem.getSourceIndex() >= 0
+                && currentLiveChannelItem.getSourceIndex() < currentLiveChannelItem.getChannelUrls().size();
+    }
+
+    private int getDefaultSettingGroupIndex() {
+        if (hasCurrentLiveChannelSource()) return 0;
+        return liveSettingGroupList != null && liveSettingGroupList.size() > 6 ? 6 : 0;
+    }
+
+    private ArrayList<LiveSettingGroup> getVisibleLiveSettingGroupList() {
+        ArrayList<LiveSettingGroup> visibleGroups = new ArrayList<>();
+        if (liveSettingGroupList == null) return visibleGroups;
+        boolean showChannelOptions = hasCurrentLiveChannelSource();
+        for (LiveSettingGroup group : liveSettingGroupList) {
+            if (group == null) continue;
+            int groupIndex = group.getGroupIndex();
+            if (!showChannelOptions && groupIndex >= 0 && groupIndex <= 2) continue;
+            visibleGroups.add(group);
+        }
+        return visibleGroups;
     }
 
     private void initLiveSettingGroupList() {

@@ -127,7 +127,7 @@ public class PlayFragment extends BaseLazyFragment {
     private static final int MSG_RESOLVE_PLAY_URL_TIMEOUT = 101;
     private static final int MSG_SWITCH_LINE_PLAY_TIMEOUT = 102;
     private static final long RESOLVE_PLAY_URL_TIMEOUT_MS = 12 * 1000L;
-    private static final long SWITCH_LINE_PLAY_TIMEOUT_MS = 12 * 1000L;
+    private static final long SWITCH_LINE_PLAY_TIMEOUT_MS = 15 * 1000L;
     private MyVideoView mVideoView;
     private TextView mPlayLoadTip;
     private ImageView mPlayLoadErr;
@@ -829,24 +829,11 @@ public class PlayFragment extends BaseLazyFragment {
                         HashMap<String, String> headers = null;
                         webUserAgent = null;
                         webHeaderMap = null;
-                        if (info.has("header")) {
-                            try {
-                                JSONObject hds = new JSONObject(info.getString("header"));
-                                Iterator<String> keys = hds.keys();
-                                while (keys.hasNext()) {
-                                    String key = keys.next();
-                                    if (headers == null) {
-                                        headers = new HashMap<>();
-                                    }
-                                    headers.put(key, hds.getString(key));
-                                    if (key.equalsIgnoreCase("user-agent")) {
-                                        webUserAgent = hds.getString(key).trim();
-                                    }
-                                }
-                                webHeaderMap = headers;
-                            } catch (Throwable th) {
-
-                            }
+                        headers = getHeaders(info);
+                        if (headers != null) {
+                            webHeaderMap = headers;
+                            webUserAgent = getHeaderValue(headers, "user-agent");
+                            if (webUserAgent != null) webUserAgent = webUserAgent.trim();
                         }
                         if (parse || jx) {
                             boolean userJxList = (playUrl.isEmpty() && ApiConfig.get().getVipParseFlags().contains(flag)) || jx;
@@ -1460,37 +1447,101 @@ public class PlayFragment extends BaseLazyFragment {
 
     JSONObject jsonParse(String input, String json) throws JSONException {
         JSONObject jsonPlayData = new JSONObject(json);
-        //小窗版解析方法改到这了  之前那个位置data解析无效
-        String url;
-        if (jsonPlayData.has("data")) {
-            url = jsonPlayData.getJSONObject("data").getString("url");
-        } else {
-            url = jsonPlayData.getString("url");
+        JSONObject playData = jsonPlayData.optJSONObject("data");
+        if (playData == null) {
+            playData = jsonPlayData;
         }
+        String url = playData.optString("url", jsonPlayData.optString("url", ""));
         if (url.startsWith("//")) {
             url = "http:" + url;
         }
-        if (!url.startsWith("http")) {
+        boolean parse = false;
+        if (url.startsWith("video://")) {
+            url = url.substring(8);
+            parse = true;
+        }
+        url = DefaultConfig.checkReplaceProxy(url);
+        if (!url.startsWith("http") && !url.startsWith("data:application")) {
             return null;
         }
+        parse = parse || playData.optInt("parse", jsonPlayData.optInt("parse", 0)) == 1;
         JSONObject headers = new JSONObject();
-        String ua = jsonPlayData.optString("user-agent", "");
+        HashMap<String, String> headerMap = getHeaders(jsonPlayData);
+        HashMap<String, String> dataHeaderMap = getHeaders(playData);
+        if (headerMap != null) putHeaders(headers, headerMap);
+        if (dataHeaderMap != null) putHeaders(headers, dataHeaderMap);
+        String ua = playData.optString("user-agent", jsonPlayData.optString("user-agent", ""));
         if (ua.trim().length() > 0) {
             headers.put("User-Agent", " " + ua);
         }
-        String referer = jsonPlayData.optString("referer", "");
+        String referer = playData.optString("referer", jsonPlayData.optString("referer", ""));
         if (referer.trim().length() > 0) {
             headers.put("Referer", " " + referer);
         }
         JSONObject taskResult = new JSONObject();
         taskResult.put("header", headers);
         taskResult.put("url", url);
+        taskResult.put("parse", parse ? 1 : 0);
         return taskResult;
+    }
+
+    private HashMap<String, String> getHeaders(JSONObject object) {
+        if (object == null) return null;
+        HashMap<String, String> headers = new HashMap<>();
+        appendHeaders(headers, object.opt("header"));
+        appendHeaders(headers, object.opt("headers"));
+        return headers.isEmpty() ? null : headers;
+    }
+
+    private void appendHeaders(HashMap<String, String> headers, Object rawHeaders) {
+        if (rawHeaders == null || rawHeaders == JSONObject.NULL) return;
+        try {
+            JSONObject json = null;
+            if (rawHeaders instanceof JSONObject) {
+                json = (JSONObject) rawHeaders;
+            } else if (rawHeaders instanceof String) {
+                String text = ((String) rawHeaders).trim();
+                if (!TextUtils.isEmpty(text)) {
+                    json = new JSONObject(text);
+                }
+            }
+            if (json == null) return;
+            Iterator<String> keys = json.keys();
+            while (keys.hasNext()) {
+                String key = keys.next();
+                if (!TextUtils.isEmpty(key)) {
+                    headers.put(key, json.optString(key, ""));
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void putHeaders(JSONObject target, HashMap<String, String> headers) throws JSONException {
+        if (target == null || headers == null) return;
+        for (String key : headers.keySet()) {
+            target.put(key, headers.get(key));
+        }
+    }
+
+    private String getHeaderValue(HashMap<String, String> headers, String name) {
+        if (headers == null || name == null) return null;
+        for (String key : headers.keySet()) {
+            if (name.equalsIgnoreCase(key)) {
+                return headers.get(key);
+            }
+        }
+        return null;
     }
 
     void startResolvePlayUrlTimeout() {
         cancelPlayTimeout();
-        mHandler.sendEmptyMessageDelayed(MSG_RESOLVE_PLAY_URL_TIMEOUT, RESOLVE_PLAY_URL_TIMEOUT_MS);
+        mHandler.sendEmptyMessageDelayed(MSG_RESOLVE_PLAY_URL_TIMEOUT, getResolvePlayUrlTimeoutMs());
+    }
+
+    private long getResolvePlayUrlTimeoutMs() {
+        if (sourceBean == null) return RESOLVE_PLAY_URL_TIMEOUT_MS;
+        return Math.max(RESOLVE_PLAY_URL_TIMEOUT_MS, (sourceBean.getPlayTimeoutSeconds() + 1L) * 1000L);
     }
 
     void startSwitchLinePlayTimeout() {
@@ -1609,15 +1660,13 @@ public class PlayFragment extends BaseLazyFragment {
                 try {
                     HashMap<String, String> reqHeaders = new HashMap<>();
                     JSONObject jsonObject = new JSONObject(pb.getExt());
-                    if (jsonObject.has("header")) {
-                        JSONObject headerJson = jsonObject.optJSONObject("header");
-                        Iterator<String> keys = headerJson.keys();
-                        while (keys.hasNext()) {
-                            String key = keys.next();
+                    HashMap<String, String> headerMap = getHeaders(jsonObject);
+                    if (headerMap != null) {
+                        for (String key : headerMap.keySet()) {
                             if (key.equalsIgnoreCase("user-agent")) {
-                                webUserAgent = headerJson.getString(key).trim();
-                            }else {
-                                reqHeaders.put(key, headerJson.optString(key, ""));
+                                webUserAgent = headerMap.get(key).trim();
+                            } else {
+                                reqHeaders.put(key, headerMap.get(key));
                             }
                         }
                         if(reqHeaders.size()>0)webHeaderMap = reqHeaders;
@@ -1634,12 +1683,10 @@ public class PlayFragment extends BaseLazyFragment {
             HttpHeaders reqHeaders = new HttpHeaders();
             try {
                 JSONObject jsonObject = new JSONObject(pb.getExt());
-                if (jsonObject.has("header")) {
-                    JSONObject headerJson = jsonObject.optJSONObject("header");
-                    Iterator<String> keys = headerJson.keys();
-                    while (keys.hasNext()) {
-                        String key = keys.next();
-                        reqHeaders.put(key, headerJson.optString(key, ""));
+                HashMap<String, String> headerMap = getHeaders(jsonObject);
+                if (headerMap != null) {
+                    for (String key : headerMap.keySet()) {
+                        reqHeaders.put(key, headerMap.get(key));
                     }
                 }
             } catch (Throwable e) {
@@ -1663,23 +1710,17 @@ public class PlayFragment extends BaseLazyFragment {
                             String json = response.body();
                             try {
                                 JSONObject rs = jsonParse(webUrl, json);
-                                HashMap<String, String> headers = null;
-                                if (rs.has("header")) {
-                                    try {
-                                        JSONObject hds = rs.getJSONObject("header");
-                                        Iterator<String> keys = hds.keys();
-                                        while (keys.hasNext()) {
-                                            String key = keys.next();
-                                            if (headers == null) {
-                                                headers = new HashMap<>();
-                                            }
-                                            headers.put(key, hds.getString(key));
-                                        }
-                                    } catch (Throwable th) {
-
+                                HashMap<String, String> headers = getHeaders(rs);
+                                if (rs.optInt("parse", 0) == 1) {
+                                    webHeaderMap = headers;
+                                    if (headers != null) {
+                                        webUserAgent = getHeaderValue(headers, "user-agent");
+                                        if (webUserAgent != null) webUserAgent = webUserAgent.trim();
                                     }
+                                    loadWebView(DefaultConfig.checkReplaceProxy(rs.getString("url")));
+                                } else {
+                                    playUrl(rs.getString("url"), headers);
                                 }
-                                playUrl(rs.getString("url"), headers);
                             } catch (Throwable e) {
                                 e.printStackTrace();
                                 errorWithRetry("解析错误", false);
@@ -1711,22 +1752,7 @@ public class PlayFragment extends BaseLazyFragment {
 //                        errorWithRetry("解析错误", false);
                         setTip("解析错误", false, true);
                     } else {
-                        HashMap<String, String> headers = null;
-                        if (rs.has("header")) {
-                            try {
-                                JSONObject hds = rs.getJSONObject("header");
-                                Iterator<String> keys = hds.keys();
-                                while (keys.hasNext()) {
-                                    String key = keys.next();
-                                    if (headers == null) {
-                                        headers = new HashMap<>();
-                                    }
-                                    headers.put(key, hds.getString(key));
-                                }
-                            } catch (Throwable th) {
-
-                            }
-                        }
+                        HashMap<String, String> headers = getHeaders(rs);
                         if (rs.has("jxFrom")) {
                             if(!isAdded())return;
                             requireActivity().runOnUiThread(new Runnable() {
@@ -1846,22 +1872,7 @@ public class PlayFragment extends BaseLazyFragment {
             if(rs==null || !rs.has("url"))return;
             stopLoadWebView(false);
         }
-        HashMap<String, String> headers = null;
-        if (rs.has("header")) {
-            try {
-                JSONObject hds = rs.getJSONObject("header");
-                Iterator<String> keys = hds.keys();
-                while (keys.hasNext()) {
-                    String key = keys.next();
-                    if (headers == null) {
-                        headers = new HashMap<>();
-                    }
-                    headers.put(key, hds.getString(key));
-                }
-            } catch (Throwable th) {
-                th.printStackTrace();
-            }
-        }
+        HashMap<String, String> headers = getHeaders(rs);
         if (rs.has("jxFrom")) {
             if(!isAdded())return;
             requireActivity().runOnUiThread(new Runnable() {

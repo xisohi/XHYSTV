@@ -4,6 +4,8 @@ import static com.github.tvbox.osc.util.RegexUtils.getPattern;
 
 import android.app.Activity;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.util.Base64;
 
@@ -32,6 +34,7 @@ import com.github.tvbox.osc.util.LOG;
 import com.github.tvbox.osc.util.M3u8;
 import com.github.tvbox.osc.util.MD5;
 import com.github.tvbox.osc.util.OkGoHelper;
+import com.github.tvbox.osc.util.Proxy;
 import com.github.tvbox.osc.util.VideoParseRuler;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -51,12 +54,15 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -88,6 +94,8 @@ public class ApiConfig {
     private final JsLoader jsLoader = new JsLoader();
     private final IPyLoader pyLoader =  new pyLoader();
     private final Gson gson;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService jarLoadExecutor = Executors.newSingleThreadExecutor();
 
     private final String userAgent = "okhttp/3.15";
 
@@ -446,6 +454,31 @@ public class ApiConfig {
         loadJar(useCache, spider, callback, 0);
     }
 
+    private interface JarLoadCallback {
+        void complete(boolean success);
+    }
+
+    private void loadJarAsync(File file, JarLoadCallback callback) {
+        jarLoadExecutor.execute(new Runnable() {
+            @Override
+            public void run() {
+                boolean success = false;
+                try {
+                    success = file != null && file.exists() && jarLoader.load(file.getAbsolutePath());
+                } catch (Throwable th) {
+                    LOG.e("echo---jar Loader threw exception: " + th.getMessage());
+                }
+                final boolean result = success;
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        callback.complete(result);
+                    }
+                });
+            }
+        });
+    }
+
     private void loadJar(boolean useCache, String spider, LoadConfigCallback callback, int retryCount) {
         String[] urls = spider.split(";md5;");
         String jarUrl = urls[0];
@@ -454,6 +487,19 @@ public class ApiConfig {
 
         if (!md5.isEmpty() || useCache) {
             if (cache.exists() && (useCache || MD5.getFileMd5(cache).equalsIgnoreCase(md5))) {
+                if (cache.exists()) {
+                    loadJarAsync(cache, new JarLoadCallback() {
+                        @Override
+                        public void complete(boolean success) {
+                            if (success) {
+                                callback.success();
+                            } else {
+                                callback.error("md5缓存失效");
+                            }
+                        }
+                    });
+                    return;
+                }
                 if (jarLoader.load(cache.getAbsolutePath())) {
                     callback.success();
                 } else {
@@ -464,6 +510,19 @@ public class ApiConfig {
         }else {
             if (Boolean.parseBoolean(jarCache) && cache.exists() && !FileUtils.isWeekAgo(cache)) {
                 LOG.i("echo-load jar jarCache:"+jarUrl);
+                if (cache.exists()) {
+                    loadJarAsync(cache, new JarLoadCallback() {
+                        @Override
+                        public void complete(boolean success) {
+                            if (success) {
+                                callback.success();
+                            } else {
+                                loadJar(false, spider, callback, retryCount);
+                            }
+                        }
+                    });
+                    return;
+                }
                 if (jarLoader.load(cache.getAbsolutePath())) {
                     callback.success();
                     return;
@@ -530,6 +589,22 @@ public class ApiConfig {
                     public void onSuccess(Response<File> response) {
                         File file = response.body();
                         if (file != null && file.exists()) {
+                            loadJarAsync(file, new JarLoadCallback() {
+                                @Override
+                                public void complete(boolean success) {
+                                    if (success) {
+                                        LOG.i("echo---load-jar-success");
+                                        callback.success();
+                                    } else {
+                                        LOG.e("echo---jar Loader returned false");
+                                        if (retryLoad("loader_false")) return;
+                                        callback.error("JAR加载失败");
+                                    }
+                                }
+                            });
+                            return;
+                        }
+                        if (file != null && file.exists()) {
                             try {
                                 if (jarLoader.load(file.getAbsolutePath())) {
                                     LOG.i("echo---load-jar-success");
@@ -556,6 +631,20 @@ public class ApiConfig {
                         Throwable ex = response.getException();
                         if (ex != null) {
                             LOG.i("echo---jar Request failed: " + ex.getMessage());
+                        }
+                        if (cache.exists()) {
+                            loadJarAsync(cache, new JarLoadCallback() {
+                                @Override
+                                public void complete(boolean success) {
+                                    if (success) {
+                                        callback.success();
+                                    } else {
+                                        if (retryLoad("request_error")) return;
+                                        callback.error("网络错误");
+                                    }
+                                }
+                            });
+                            return;
                         }
                         if (cache.exists() && jarLoader.load(cache.getAbsolutePath())) {
                             callback.success();
@@ -696,6 +785,7 @@ public class ApiConfig {
             sb.setJar(DefaultConfig.safeJsonString(obj, "jar", ""));
             sb.setPlayerType(DefaultConfig.safeJsonInt(obj, "playerType", -1));
             sb.setCategories(DefaultConfig.safeJsonStringList(obj, "categories"));
+            sb.setTimeout(DefaultConfig.safeJsonInt(obj, "timeout", 0));
             sb.setClickSelector(DefaultConfig.safeJsonString(obj, "click", ""));
             sb.setStyle(DefaultConfig.safeJsonString(obj, "style", ""));
             if (firstSite == null) firstSite = sb;
@@ -1346,11 +1436,53 @@ public class ApiConfig {
     }
 
     public Object[] proxyLocal(Map<String, String> param) {
-        if ("js".equals(param.get("do"))) {
+        SourceBean source = getCurrentProxySource(param);
+        String api = source.getApi();
+
+        String siteKey = param.get("siteKey");
+        String action = param.get("do");
+
+        boolean isJs = "js".equals(action);
+        boolean isPy = "py".equals(action);
+        boolean isLive = Hawk.get(HawkConfig.PLAYER_IS_LIVE, false);
+        boolean isApiJs = api.contains(".js");
+        boolean isApiPy = api.contains(".py");
+
+        boolean canUseType3 = !TextUtils.isEmpty(siteKey)
+                && source.getType() == 3
+                && !isJs
+                && !isPy
+                && !isLive
+                && !isApiJs
+                && !isApiPy;
+
+        if (canUseType3) {
+            try {
+                Spider spider = getCSP(source);
+
+                Object[] result = spider.proxy(param);
+                if (result != null) return result;
+
+                result = jarLoader.proxyInvoke(param);
+                if (result != null) return result;
+
+                result = proxyDirect(param);
+                if (result != null) return result;
+
+                return null;
+            } catch (Throwable th) {
+                LOG.e("echo-proxy siteKey error: " + th.getMessage());
+                return null;
+            }
+        }
+
+        if (isJs) {
             return jsLoader.proxyInvoke(param);
         }
-        if (Hawk.get(HawkConfig.PLAYER_IS_LIVE, false)) {
+
+        if (isLive) {
             String liveApi = currentLiveSpider != null ? currentLiveSpider : "";
+
             if (liveApi.contains(".py")) {
                 return pyLoader.proxyInvoke(param, currentLivePyKey);
             }
@@ -1359,12 +1491,36 @@ public class ApiConfig {
             }
             return jarLoader.proxyInvoke(param);
         }
-        if ("py".equals(param.get("do"))) {
+
+        if (isPy) {
             return pyLoader.proxyInvoke(param, getCurrentPyKey());
         }
-        SourceBean sourceBean = getCurrentProxySource(param);
-        String apiString = sourceBean.getApi();
-        return apiString.contains(".py") ? pyLoader.proxyInvoke(param, getCurrentPyKey()) : jarLoader.proxyInvoke(param);
+
+        if (isApiPy) {
+            return pyLoader.proxyInvoke(param, getCurrentPyKey());
+        }
+
+        return jarLoader.proxyInvoke(param);
+    }
+
+    private Object[] proxyDirect(Map<String, String> param) {
+        try {
+            String url = param.get("url");
+            if (TextUtils.isEmpty(url)) return null;
+            url = URLDecoder.decode(url, "UTF-8");
+            if (!url.startsWith("http://") && !url.startsWith("https://")) return null;
+            if (!DefaultConfig.isVideoFormat(url)) return null;
+            if (url.contains(".m3u8")) {
+                param.put("url", url);
+                param.put("go", "live");
+                param.put("type", "m3u8");
+                return Proxy.itv(param);
+            }
+            return null;
+        } catch (Throwable th) {
+            LOG.e("echo-proxy direct fallback error: " + th.getMessage());
+            return null;
+        }
     }
 
     private SourceBean getCurrentProxySource(Map<String, String> param) {

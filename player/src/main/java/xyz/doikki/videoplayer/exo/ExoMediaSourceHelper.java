@@ -14,16 +14,13 @@ import com.google.android.exoplayer2.source.dash.DashMediaSource;
 import com.google.android.exoplayer2.source.hls.HlsMediaSource;
 import com.google.android.exoplayer2.source.rtsp.RtspMediaSource;
 import com.google.android.exoplayer2.upstream.DataSource;
-import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory;
-import com.google.android.exoplayer2.upstream.DefaultHttpDataSource;
 import com.google.android.exoplayer2.upstream.cache.Cache;
 import com.google.android.exoplayer2.upstream.cache.CacheDataSource;
 import com.google.android.exoplayer2.upstream.cache.LeastRecentlyUsedCacheEvictor;
 import com.google.android.exoplayer2.upstream.cache.SimpleCache;
-import com.google.android.exoplayer2.util.Util;
 
 import java.io.File;
-import java.util.Iterator;
+import java.util.HashMap;
 import java.util.Map;
 
 import okhttp3.OkHttpClient;
@@ -33,14 +30,13 @@ public final class ExoMediaSourceHelper {
 
     private static ExoMediaSourceHelper sInstance;
 
-    private final String mUserAgent;
     private final Context mAppContext;
-    private DefaultHttpDataSource.Factory mHttpDataSourceFactory;
+    private OkHttpDataSource.Factory mHttpDataSourceFactory;
     private Cache mCache;
+    private OkHttpClient mClient;
 
     private ExoMediaSourceHelper(Context context) {
         mAppContext = context.getApplicationContext();
-        mUserAgent = Util.getUserAgent(mAppContext, mAppContext.getApplicationInfo().name);
     }
 
     public static ExoMediaSourceHelper getInstance(Context context) {
@@ -55,9 +51,8 @@ public final class ExoMediaSourceHelper {
     }
 
     public void setOkClient(OkHttpClient client) {
-        // Keep this API for callers, but use ExoPlayer's built-in HTTP data source.
-        // The old extension-okhttp artifact is binary-incompatible with ExoPlayer 2.19.x
-        // when HTTP error responses are thrown.
+        mClient = client;
+        mHttpDataSourceFactory = null;
     }
 
     public MediaSource getMediaSource(String uri) {
@@ -94,9 +89,7 @@ public final class ExoMediaSourceHelper {
         } else {
             factory = getDataSourceFactory();
         }
-        if (mHttpDataSourceFactory != null) {
-            setHeaders(headers);
-        }
+        applyHeaders(headers);
         switch (contentType) {
             case C.TYPE_DASH:
                 return new DashMediaSource.Factory(factory).createMediaSource(MediaItem.fromUri(contentUri));
@@ -129,7 +122,7 @@ public final class ExoMediaSourceHelper {
         if (headers == null || !headers.containsKey(HEADER_FORMAT)) {
             return C.TYPE_OTHER;
         }
-        String format = headers.remove(HEADER_FORMAT);
+        String format = headers.get(HEADER_FORMAT);
         if (format == null) {
             return C.TYPE_OTHER;
         }
@@ -187,7 +180,7 @@ public final class ExoMediaSourceHelper {
      * @return A new DataSource factory.
      */
     private DataSource.Factory getDataSourceFactory() {
-        return new DefaultDataSourceFactory(mAppContext, getHttpDataSourceFactory());
+        return new com.google.android.exoplayer2.upstream.DefaultDataSourceFactory(mAppContext, getHttpDataSourceFactory());
     }
 
     /**
@@ -195,34 +188,36 @@ public final class ExoMediaSourceHelper {
      *
      * @return A new HttpDataSource factory.
      */
-    private DataSource.Factory getHttpDataSourceFactory() {
+    private OkHttpDataSource.Factory getHttpDataSourceFactory() {
         if (mHttpDataSourceFactory == null) {
-            mHttpDataSourceFactory = new DefaultHttpDataSource.Factory()
-                    .setUserAgent(mUserAgent)
-                    .setAllowCrossProtocolRedirects(true);
+            OkHttpClient client = mClient != null ? mClient : new OkHttpClient.Builder().build();
+            mHttpDataSourceFactory = new OkHttpDataSource.Factory(client);
         }
         return mHttpDataSourceFactory;
     }
 
-    private void setHeaders(Map<String, String> headers) {
+    private void applyHeaders(Map<String, String> headers) {
+        Map<String, String> requestHeaders = new HashMap<>();
+        String userAgent = null;
         if (headers != null && headers.size() > 0) {
-            headers.remove(HEADER_FORMAT);
-            //如果发现用户通过header传递了UA，则强行将HttpDataSourceFactory里面的userAgent字段替换成用户的
-            if (headers.containsKey("User-Agent")) {
-                String value = headers.remove("User-Agent");
-                if (!TextUtils.isEmpty(value)) {
-                    mHttpDataSourceFactory.setUserAgent(value.trim());
+            for (Map.Entry<String, String> entry : headers.entrySet()) {
+                String key = entry.getKey();
+                String value = entry.getValue();
+                if (TextUtils.isEmpty(key) || TextUtils.isEmpty(value)) {
+                    continue;
+                }
+                if (HEADER_FORMAT.equalsIgnoreCase(key)) {
+                    continue;
+                }
+                if ("User-Agent".equalsIgnoreCase(key)) {
+                    userAgent = value.trim();
+                } else {
+                    requestHeaders.put(key, value.trim());
                 }
             }
-            Iterator<String> iter = headers.keySet().iterator();
-            while (iter.hasNext()) {
-                String k = iter.next();
-                String v = headers.get(k);
-                if (v != null)
-                    headers.put(k, v.trim());
-            }
-            mHttpDataSourceFactory.setDefaultRequestProperties(headers);
         }
+        mHttpDataSourceFactory.setUserAgent(userAgent);
+        mHttpDataSourceFactory.setDefaultRequestProperties(requestHeaders);
     }
 
     public void setCache(Cache cache) {
