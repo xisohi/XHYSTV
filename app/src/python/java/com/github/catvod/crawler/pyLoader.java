@@ -1,11 +1,6 @@
-// 文件: app/src/python/java/com/github/catvod/crawler/python/PyLoader.java
 package com.github.catvod.crawler;
 
-import android.Manifest;
-import android.content.pm.PackageManager;
 import android.util.Log;
-
-import androidx.core.content.ContextCompat;
 
 import com.github.catvod.crawler.python.IPyLoader;
 import com.github.tvbox.osc.base.App;
@@ -57,10 +52,6 @@ public class pyLoader implements IPyLoader {
             return spiders.get(key);
         }
         try {
-            if (ContextCompat.checkSelfPermission(App.getInstance(), Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                Log.i("PyLoader", "无存储权限，终止执行");
-                return new SpiderNull();
-            }
             Log.i("PyLoader", "echo-getSpider url: " + getPyUrl(cls, ext));
             Spider sp = pythonLoader.getSpider(key, getPyUrl(cls, ext));
             if (sp == null) return new SpiderNull();

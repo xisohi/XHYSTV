@@ -7,6 +7,7 @@ import android.util.Log;
 
 import com.chaquo.python.PyObject;
 import com.github.catvod.crawler.Spider;
+import com.google.android.exoplayer2.util.UriUtil;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -27,7 +28,7 @@ public class PythonSpider extends Spider {
     private String name;
 
     public PythonSpider() {
-        this("/storage/emulated/0/plugin/");
+        this(PythonLoader.getInstance().getCachePath());
     }
 
     public PythonSpider(String cache) {
@@ -90,15 +91,7 @@ public class PythonSpider extends Spider {
     private String resolveDependenceUrl(String baseUrl, String api) {
         if (api == null || api.isEmpty()) return "";
         String dep = api.endsWith(".py") ? api : api + ".py";
-        if (dep.startsWith("http://") || dep.startsWith("https://") || dep.startsWith("file://") || dep.startsWith("clan://")) {
-            return dep;
-        }
-        String cleanBase = baseUrl;
-        int queryIndex = cleanBase.indexOf('?');
-        if (queryIndex >= 0) cleanBase = cleanBase.substring(0, queryIndex);
-        int slashIndex = cleanBase.lastIndexOf('/');
-        if (slashIndex < 0) return dep;
-        return cleanBase.substring(0, slashIndex + 1) + dep;
+        return UriUtil.resolve(baseUrl, dep);
     }
 
     public String getName() {

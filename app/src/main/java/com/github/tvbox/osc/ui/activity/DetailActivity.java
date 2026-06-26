@@ -164,9 +164,7 @@ public class DetailActivity extends BaseActivity {
         applyPreviewRoundCorners();
         thumbContainer = findViewById(R.id.thumbContainer);
         ivThumb = findViewById(R.id.ivThumb);
-        thumbContainer.setVisibility(!showPreview ? View.VISIBLE : View.GONE);
-        llPlayerPlace.setVisibility(showPreview ? View.VISIBLE : View.GONE);
-        ivThumb.setVisibility(!showPreview ? View.VISIBLE : View.GONE);
+        applyThumbPreviewStyle();
         tvName = findViewById(R.id.tvName);
         tvYear = findViewById(R.id.tvYear);
         tvSite = findViewById(R.id.tvSite);
@@ -212,8 +210,7 @@ public class DetailActivity extends BaseActivity {
         firstReverse = false;
         preFlag = "";
         if (showPreview) {
-            playFragment = new PlayFragment();
-            getSupportFragmentManager().beginTransaction().add(R.id.previewPlayer, playFragment).commitNowAllowingStateLoss();
+            ensurePlayFragment();
             tvPlay.setText("全屏");
         }
         llPlayerFragmentContainerBlock.setFocusable(showPreview);
@@ -238,7 +235,7 @@ public class DetailActivity extends BaseActivity {
         mSeriesGroupView.setAdapter(seriesGroupAdapter);
 
         llPlayerFragmentContainerBlock.setOnClickListener(v -> {
-            toggleFullPreview();
+            enterFullPreview();
             if (firstReverse) {
                 jumpToPlay();
                 firstReverse=false;
@@ -250,7 +247,7 @@ public class DetailActivity extends BaseActivity {
             public void onClick(View v) {
                 FastClickCheckUtil.check(v);
                 if (showPreview) {
-                    toggleFullPreview();
+                    enterFullPreview();
                     if(firstReverse){
                         jumpToPlay();
                         firstReverse=false;
@@ -463,7 +460,7 @@ public class DetailActivity extends BaseActivity {
                     seriesAdapter.getData().get(vodInfo.playIndex).selected = true;
                     seriesAdapter.notifyItemChanged(vodInfo.playIndex);
                     //选集全屏 想选集不全屏的注释下面一行
-                    if (showPreview && !fullWindows && isCurrentPlaying && !isAllowFull && playFragment.getPlayer().isPlaying())toggleFullPreview();
+                    if (showPreview && !fullWindows && isCurrentPlaying && !isAllowFull && playFragment.getPlayer().isPlaying()) enterFullPreview();
                     if (!showPreview || reload) {
                         jumpToPlay();
                         firstReverse=false;
@@ -568,6 +565,7 @@ public class DetailActivity extends BaseActivity {
 //            bundle.putSerializable("VodInfo", vodInfo);
             App.getInstance().setVodInfo(vodInfo);
             if (showPreview) {
+                ensurePlayFragment();
                 if (previewVodInfo == null) {
                     try {
                         ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -589,9 +587,11 @@ public class DetailActivity extends BaseActivity {
 //                    bundle.putSerializable("VodInfo", previewVodInfo);
                     App.getInstance().setVodInfo(previewVodInfo);
                 }
-                playFragment.setData(bundle);
+                if (playFragment != null) playFragment.setData(bundle);
             } else {
-                jumpActivity(PlayActivity.class, bundle);
+                ensurePlayFragment();
+                if (playFragment != null) playFragment.setData(bundle);
+                enterFullPreview();
             }
         }
     }
@@ -712,6 +712,13 @@ public class DetailActivity extends BaseActivity {
         llPlayerFragmentContainer.setOutlineProvider(provider);
         llPlayerFragmentContainerBlock.setClipToOutline(true);
         llPlayerFragmentContainerBlock.setOutlineProvider(provider);
+    }
+
+    private void applyThumbPreviewStyle() {
+        thumbContainer.setVisibility(showPreview ? View.GONE : View.VISIBLE);
+        llPlayerPlace.setVisibility(showPreview ? View.VISIBLE : View.GONE);
+        ivThumb.setVisibility(!showPreview ? View.VISIBLE : View.GONE);
+        thumbContainer.setBackgroundResource(showPreview ? R.drawable.shape_detail_thumb_bg : R.drawable.preview_player_round);
     }
 
     private void setPreviewRoundClip(boolean enable) {
@@ -1206,6 +1213,7 @@ public class DetailActivity extends BaseActivity {
         OkGo.getInstance().cancelTag("fenci");
         OkGo.getInstance().cancelTag("detail");
         OkGo.getInstance().cancelTag("quick_search");
+        releasePlayFragment();
         EventBus.getDefault().unregister(this);
     }
 
@@ -1214,22 +1222,28 @@ public class DetailActivity extends BaseActivity {
         if (fullWindows) {
             if (playFragment.onBackPressed())
                 return;
-            toggleFullPreview();
-            List<VodInfo.VodSeries> list = vodInfo.seriesMap.get(vodInfo.playFlag);
-            assert list != null;
-            tvSeriesGroup.setVisibility(list.size()>1 ? View.VISIBLE : View.GONE);
-            mGridView.requestFocus();
+            exitFullPreview();
             return;
         }
         if (seriesSelect) {
             if (seriesFlagFocus != null && !seriesFlagFocus.isFocused()) {
-                seriesFlagFocus.requestFocus();
-                return;
+                try {
+                    if (seriesFlagFocus.isShown()) {
+                        seriesFlagFocus.requestFocus();
+                        return;
+                    }
+                } catch (Throwable th) {
+                    th.printStackTrace();
+                }
             }
         }
         if(showPreview && playFragment!=null){
-            playFragment.setPlayTitle(false);
-            playFragment.setExitingPreview(true);
+            try {
+                playFragment.setPlayTitle(false);
+                playFragment.setExitingPreview(true);
+            } catch (Throwable th) {
+                th.printStackTrace();
+            }
         }
         super.onBackPressed();
     }
@@ -1271,23 +1285,58 @@ public class DetailActivity extends BaseActivity {
     ViewGroup.LayoutParams windowsFull = null;
 
     void toggleFullPreview() {
+        setFullPreview(!fullWindows);
+    }
+
+    void enterFullPreview() {
+        setFullPreview(true);
+    }
+
+    void exitFullPreview() {
+        setFullPreview(false);
+    }
+
+    void setFullPreview(boolean full) {
         if (windowsPreview == null) {
             windowsPreview = llPlayerFragmentContainer.getLayoutParams();
         }
         if (windowsFull == null) {
             windowsFull = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
         }
-        fullWindows = !fullWindows;
+        fullWindows = full;
         if (playFragment != null) {
             playFragment.setAutoSwitchLineEnabled(!fullWindows);
         }
+        llPlayerFragmentContainer.setVisibility(fullWindows || showPreview ? View.VISIBLE : View.GONE);
         llPlayerFragmentContainer.setLayoutParams(fullWindows ? windowsFull : windowsPreview);
         setPreviewRoundClip(!fullWindows);
-        llPlayerFragmentContainerBlock.setVisibility(fullWindows ? View.GONE : View.VISIBLE);
+        llPlayerFragmentContainerBlock.setVisibility(!fullWindows && showPreview ? View.VISIBLE : View.GONE);
         mGridView.setVisibility(fullWindows ? View.GONE : View.VISIBLE);
         mGridViewFlag.setVisibility(fullWindows ? View.GONE : View.VISIBLE);
-        tvSeriesGroup.setVisibility(fullWindows ? View.GONE : View.VISIBLE);
+        if (fullWindows) {
+            tvSeriesGroup.setVisibility(View.GONE);
+        } else {
+            List<VodInfo.VodSeries> list = vodInfo == null || vodInfo.seriesMap == null || TextUtils.isEmpty(vodInfo.playFlag) ? null : vodInfo.seriesMap.get(vodInfo.playFlag);
+            tvSeriesGroup.setVisibility(list != null && list.size() > 1 ? View.VISIBLE : View.GONE);
+            if (showPreview) mGridView.requestFocus();
+            else {
+                if (playFragment != null) playFragment.pauseForHidden();
+                mGridView.requestFocus();
+            }
+        }
         toggleSubtitleTextSize();
+    }
+
+    void ensurePlayFragment() {
+        if (playFragment != null) return;
+        playFragment = new PlayFragment();
+        getSupportFragmentManager().beginTransaction().add(R.id.previewPlayer, playFragment).commitNowAllowingStateLoss();
+    }
+
+    void releasePlayFragment() {
+        if (playFragment == null) return;
+        getSupportFragmentManager().beginTransaction().remove(playFragment).commitNowAllowingStateLoss();
+        playFragment = null;
     }
 
     void toggleSubtitleTextSize() {

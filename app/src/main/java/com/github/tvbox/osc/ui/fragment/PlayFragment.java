@@ -691,6 +691,7 @@ public class PlayFragment extends BaseLazyFragment {
                         } else {
                             PlayerHelper.updateCfg(mVideoView, mVodPlayerCfg);
                         }
+                        mController.hidePauseRoot();
                         mVideoView.setProgressKey(progressKey);
                         if (headers != null) {
                             mVideoView.setUrl(url, headers);
@@ -1322,6 +1323,7 @@ public class PlayFragment extends BaseLazyFragment {
 
     public void play(boolean reset) {
         if(mVodInfo==null)return;
+        exitingPreview = false;
         VodInfo.VodSeries vs = mVodInfo.seriesMap.get(mVodInfo.playFlag).get(mVodInfo.playIndex);
         EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_REFRESH, mVodInfo));
         setTip("正在获取播放信息", true, false);
@@ -1575,6 +1577,21 @@ public class PlayFragment extends BaseLazyFragment {
             cancelPlayTimeout();
             triedLineFlags.clear();
         }
+    }
+
+    public void pauseForHidden() {
+        cancelPlayTimeout();
+        stopParse();
+        playbackStarted = false;
+        if (mVideoView != null) {
+            mVideoView.pause();
+            mVideoView.release();
+        }
+        mController.stopOther();
+        resetDanmuState();
+        webPlayUrl = null;
+        webHeaderMap = null;
+        initParseLoadFound();
     }
 
     void markPlaybackStarted() {

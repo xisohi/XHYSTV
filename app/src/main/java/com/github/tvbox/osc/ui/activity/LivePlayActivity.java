@@ -2700,9 +2700,13 @@ public class LivePlayActivity extends BaseActivity {
     }
 
     private void initLiveChannelList() {
+        if (ApiConfig.get().shouldReloadLiveConfig()) {
+            loadLiveConfigOnEnter();
+            return;
+        }
         List<LiveChannelGroup> list = ApiConfig.get().getChannelGroupList();
         if (list.isEmpty()) {
-            setEmptyLiveChannelList();
+            loadLiveConfigOnEnter();
             return;
         }
         initLiveObj();
@@ -2714,6 +2718,48 @@ public class LivePlayActivity extends BaseActivity {
             showSuccess();
             initLiveState();
         }
+    }
+
+    private boolean loadingLiveConfigOnEnter = false;
+
+    private void loadLiveConfigOnEnter() {
+        if (loadingLiveConfigOnEnter) return;
+        loadingLiveConfigOnEnter = true;
+        showLoading();
+        ApiConfig.get().loadLiveConfig(true, new ApiConfig.LoadConfigCallback() {
+            @Override
+            public void success() {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        loadingLiveConfigOnEnter = false;
+                        initLiveChannelList();
+                        initLiveSettingGroupList();
+                    }
+                });
+            }
+
+            @Override
+            public void error(String msg) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        loadingLiveConfigOnEnter = false;
+                        setEmptyLiveChannelList();
+                    }
+                });
+            }
+
+            @Override
+            public void notice(String msg) {
+                mHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        Toast.makeText(LivePlayActivity.this, msg, Toast.LENGTH_SHORT).show();
+                    }
+                });
+            }
+        });
     }
 
     public void loadProxyLives(String url) {
@@ -2893,10 +2939,16 @@ public class LivePlayActivity extends BaseActivity {
             if (lastChannelGroupIndex != -1) break;
         }
         if (lastChannelGroupIndex == -1) {
-            lastChannelGroupIndex = getFirstNoPasswordChannelGroup();
-            if (lastChannelGroupIndex == -1)
-                lastChannelGroupIndex = 0;
-            lastLiveChannelIndex = 0;
+            Integer[] cctv1Channel = getFirstChannelByName("CCTV1");
+            if (cctv1Channel != null) {
+                lastChannelGroupIndex = cctv1Channel[0];
+                lastLiveChannelIndex = cctv1Channel[1];
+            } else {
+                lastChannelGroupIndex = getFirstNoPasswordChannelGroup();
+                if (lastChannelGroupIndex == -1)
+                    lastChannelGroupIndex = 0;
+                lastLiveChannelIndex = 0;
+            }
         }
         if (lastLiveChannelItem != null && sourceIndex >= 0 && lastLiveChannelItem.getSourceNum() > 0) {
             lastLiveChannelItem.setSourceIndex(Math.min(sourceIndex, lastLiveChannelItem.getSourceNum() - 1));
@@ -3161,6 +3213,23 @@ public class LivePlayActivity extends BaseActivity {
         } else {
             return new ArrayList<>();
         }
+    }
+
+    private Integer[] getFirstChannelByName(String keyword) {
+        if (TextUtils.isEmpty(keyword)) return null;
+        String upperKeyword = keyword.toUpperCase(Locale.US);
+        for (LiveChannelGroup liveChannelGroup : liveChannelGroupList) {
+            if (liveChannelGroup == null || isNeedInputPassword(liveChannelGroup.getGroupIndex())) continue;
+            ArrayList<LiveChannelItem> groupChannels = liveChannelGroup.getLiveChannels();
+            if (groupChannels == null || groupChannels.isEmpty()) continue;
+            for (LiveChannelItem item : groupChannels) {
+                if (item == null || TextUtils.isEmpty(item.getChannelName())) continue;
+                if (item.getChannelName().toUpperCase(Locale.US).contains(upperKeyword)) {
+                    return new Integer[]{liveChannelGroup.getGroupIndex(), item.getChannelIndex()};
+                }
+            }
+        }
+        return null;
     }
 
     private Integer[] getNextChannel(int direction) {

@@ -20,6 +20,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -101,14 +102,27 @@ public class PythonLoader {
             pyInstance = Python.getInstance();
             pyApp = pyInstance.getModule("app");
         }
+        File pyCache = new File(app.getCacheDir(), "py");
+        if (!pyCache.exists()) pyCache.mkdirs();
+        setPluginConfig(pyCache.getAbsolutePath());
         return this;
     }
 
-    String cache = "/storage/emulated/0/plugin/";
+    String cache = "";
 
     public PythonLoader setPluginConfig(String config) {
-        this.cache = config;
+        if (config == null || config.isEmpty()) {
+            this.cache = "";
+        } else if (config.endsWith(File.separator)) {
+            this.cache = config;
+        } else {
+            this.cache = config + File.separator;
+        }
         return this;
+    }
+
+    String getCachePath() {
+        return cache;
     }
 
     public String getUrlByApi(String api) {
