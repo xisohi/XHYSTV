@@ -30,7 +30,7 @@ public class Github {
             "https://ghproxy.homeboyc.cn/",     // 🆕 社区推荐
             "https://gh-proxy.com/",            // ✅ 稳定，支持大文件
             "https://github.akams.cn/",         // ✅ 功能全面
-            "https://gitproxy.click/",          // ✅ 轻量快速
+            "https://gh.llkk.cc/",          // ✅ 轻量快速
             "https://gh.xisohi.dpdns.org/"      // 个人维护（备用）
     };
 
