@@ -37,8 +37,9 @@ import java.nio.channels.FileChannel;
  * TVBox 应用更新管理器（优化版）
  * 改进：
  * 1. 下载前自动选择最快代理（利用 Github 类的测速功能）
- * 2. 异步测速不阻塞 UI
- * 3. 保留原有重试机制作为降级方案
+ * 2. 启动时不测速，节省资源
+ * 3. 24小时缓存测速结果
+ * 4. 保留原有重试机制作为降级方案
  */
 public class Updater implements Download.Callback {
     private static final String TAG = "Updater";
@@ -83,24 +84,6 @@ public class Updater implements Download.Callback {
         new Thread(this::checkUpdate).start();
     }
 
-    private void startDownload() {
-        // 显示提示
-        showToast("正在选择最优下载线路...");
-
-        new Thread(() -> {
-            // 下载前测速
-            Github.forceSpeedTest();
-            isSpeedTested = true;
-            Log.i(TAG, "测速完成，开始下载");
-
-            // 切回主线程下载
-            mainHandler.post(() -> {
-                isInstallTriggered = false;
-                String url = getApkUrl();
-                // ... 开始下载 ...
-            });
-        }).start();
-    }
     /**
      * 获取 JSON 配置地址（无需代理）
      */
@@ -207,7 +190,34 @@ public class Updater implements Download.Callback {
         btnConfirm.setOnClickListener(v -> {
             btnConfirm.setEnabled(false);
             btnConfirm.setText("准备下载...");
-            startDownload();
+
+            // 显示提示，告知用户正在选择最优线路
+            showToast("正在选择最优下载线路...");
+
+            // 在后台线程测速
+            new Thread(() -> {
+                try {
+                    // 执行测速（同步，但不会阻塞 UI）
+                    Github.forceSpeedTest();
+                    isSpeedTested = true;
+                    Log.i(TAG, "测速完成，开始下载");
+
+                    // 切回主线程执行实际下载
+                    mainHandler.post(() -> {
+                        // 重置安装触发标记
+                        isInstallTriggered = false;
+                        // 执行实际下载
+                        doDownload();
+                    });
+                } catch (Exception e) {
+                    Log.e(TAG, "测速失败: " + e.getMessage());
+                    // 测速失败也继续下载（使用默认代理）
+                    mainHandler.post(() -> {
+                        isInstallTriggered = false;
+                        doDownload();
+                    });
+                }
+            }).start();
         });
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
@@ -215,35 +225,13 @@ public class Updater implements Download.Callback {
         btnConfirm.requestFocus();
     }
 
-    // ========== 权限检查和路径选择方法 ==========
-
-    private boolean hasStoragePermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return true;
-        }
-        return activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                == PackageManager.PERMISSION_GRANTED;
-    }
-
-    private File getAvailableCacheDir() {
-        if (hasStoragePermission()) {
-            File externalCache = activity.getExternalCacheDir();
-            if (externalCache != null && externalCache.canWrite()) {
-                Log.d(TAG, "使用外部缓存目录: " + externalCache.getPath());
-                return externalCache;
-            } else {
-                Log.d(TAG, "外部缓存不可用，回退到内部缓存");
-            }
-        }
-        File internalCache = activity.getCacheDir();
-        Log.d(TAG, "使用内部缓存目录: " + internalCache.getPath());
-        return internalCache;
-    }
-
     /**
-     * 开始下载 APK（优化：获取 URL 前会等待测速完成）
+     * 实际执行下载
      */
-    private void startDownload() {
+    /**
+     * 实际执行下载
+     */
+    private void doDownload() {
         // 重置安装触发标记，允许重新安装
         isInstallTriggered = false;
 
@@ -273,6 +261,31 @@ public class Updater implements Download.Callback {
         }
 
         Download.create(url, file).start(this);
+    }
+
+    // ========== 权限检查和路径选择方法 ==========
+
+    private boolean hasStoragePermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return true;
+        }
+        return activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private File getAvailableCacheDir() {
+        if (hasStoragePermission()) {
+            File externalCache = activity.getExternalCacheDir();
+            if (externalCache != null && externalCache.canWrite()) {
+                Log.d(TAG, "使用外部缓存目录: " + externalCache.getPath());
+                return externalCache;
+            } else {
+                Log.d(TAG, "外部缓存不可用，回退到内部缓存");
+            }
+        }
+        File internalCache = activity.getCacheDir();
+        Log.d(TAG, "使用内部缓存目录: " + internalCache.getPath());
+        return internalCache;
     }
 
     // ========== Download.Callback 实现 ==========
@@ -305,11 +318,23 @@ public class Updater implements Download.Callback {
                 mainHandler.postDelayed(() -> {
                     // 重新触发测速（异步）
                     new Thread(() -> {
-                        Github.forceSpeedTest();
-                        isSpeedTested = true;
-                        Log.i(TAG, "重试前测速完成，使用代理: " + Github.getProxyStatus());
-                        // 开始下载
-                        startDownload();
+                        try {
+                            Github.forceSpeedTest();
+                            isSpeedTested = true;
+                            Log.i(TAG, "重试前测速完成，使用代理: " + Github.getProxyStatus());
+                            // 开始下载
+                            mainHandler.post(() -> {
+                                isInstallTriggered = false;
+                                doDownload();
+                            });
+                        } catch (Exception e) {
+                            Log.e(TAG, "重试测速失败: " + e.getMessage());
+                            // 测速失败也继续下载
+                            mainHandler.post(() -> {
+                                isInstallTriggered = false;
+                                doDownload();
+                            });
+                        }
                     }).start();
                 }, 1500);
             });
