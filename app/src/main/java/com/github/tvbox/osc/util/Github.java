@@ -129,6 +129,7 @@ public class Github {
             URL url = new URL(testUrl);
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("HEAD");
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
             conn.setConnectTimeout(3000);
             conn.setReadTimeout(3000);
             int code = conn.getResponseCode();
