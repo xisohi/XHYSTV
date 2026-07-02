@@ -25,11 +25,13 @@ public class Github {
      */
     private static final String[] PROXY_URLS = {
             "https://github.catvod.com/",       // ✅ 已验证可用
-            "https://ghp.ci/",                  // 🆕 社区推荐
             "https://ghproxy.net/",             // 备用（可能恢复）
             "https://ghfast.top/",              // 备用（可能恢复）
             "https://ghproxy.homeboyc.cn/",     // 🆕 社区推荐
-            "https://gh.xisohi.dpdns.org/",      // 个人维护（备用）
+            "https://gh-proxy.com/",            // ✅ 稳定，支持大文件
+            "https://github.akams.cn/",         // ✅ 功能全面
+            "https://gitproxy.click/",          // ✅ 轻量快速
+            "https://gh.xisohi.dpdns.org/"      // 个人维护（备用）
     };
 
     private static volatile int currentProxyIndex = 0;
