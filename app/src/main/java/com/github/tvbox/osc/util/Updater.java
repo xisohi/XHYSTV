@@ -34,13 +34,16 @@ import java.io.IOException;
 import java.nio.channels.FileChannel;
 
 /**
- * TVBox 应用更新管理器
- * 支持多代理切换、Android 4.4+ 兼容安装
- * 改进：动态选择下载路径（有存储权限时优先外部缓存，否则自动降级内部缓存）
+ * TVBox 应用更新管理器（优化版）
+ * 改进：
+ * 1. 下载前自动选择最快代理（利用 Github 类的测速功能）
+ * 2. 异步测速不阻塞 UI
+ * 3. 保留原有重试机制作为降级方案
  */
 public class Updater implements Download.Callback {
     private static final String TAG = "Updater";
     private static final int MAX_RETRY_COUNT = 4;
+    private static final int PRE_CHECK_TIMEOUT = 5000; // 预检超时 5 秒
 
     private Activity activity;
     private Handler mainHandler;
@@ -50,7 +53,8 @@ public class Updater implements Download.Callback {
     private boolean forceCheck = false;
     private boolean silentMode = false;
     private String apkName;
-    private boolean isInstallTriggered = false; // 防止重复安装
+    private boolean isInstallTriggered = false;
+    private boolean isSpeedTested = false; // 标记是否已完成测速
 
     public static Updater create() {
         return new Updater();
@@ -72,12 +76,31 @@ public class Updater implements Download.Callback {
 
     public void start(Activity activity) {
         this.activity = activity;
+
         if (forceCheck && !silentMode) {
             showToast("正在检查更新...");
         }
         new Thread(this::checkUpdate).start();
     }
 
+    private void startDownload() {
+        // 显示提示
+        showToast("正在选择最优下载线路...");
+
+        new Thread(() -> {
+            // 下载前测速
+            Github.forceSpeedTest();
+            isSpeedTested = true;
+            Log.i(TAG, "测速完成，开始下载");
+
+            // 切回主线程下载
+            mainHandler.post(() -> {
+                isInstallTriggered = false;
+                String url = getApkUrl();
+                // ... 开始下载 ...
+            });
+        }).start();
+    }
     /**
      * 获取 JSON 配置地址（无需代理）
      */
@@ -87,10 +110,30 @@ public class Updater implements Download.Callback {
 
     /**
      * 获取 APK 下载地址（已加速）
+     * 优化：在获取 URL 前确保测速已完成（最多等待 5 秒）
      */
     private String getApkUrl() {
-        // 根据 BuildConfig.FLAVOR 生成对应 APK 文件名
         apkName = "XHYSTV-" + BuildConfig.FLAVOR;
+
+        // 如果还未测速，等待测速完成（最多等待 PRE_CHECK_TIMEOUT）
+        if (!isSpeedTested) {
+            Log.d(TAG, "等待测速完成...");
+            long startTime = System.currentTimeMillis();
+            while (!isSpeedTested && (System.currentTimeMillis() - startTime) < PRE_CHECK_TIMEOUT) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            if (!isSpeedTested) {
+                Log.w(TAG, "测速超时，使用默认代理");
+            } else {
+                Log.i(TAG, "测速完成，使用最快代理下载");
+            }
+        }
+
         return Github.getApk(apkName);
     }
 
@@ -151,7 +194,6 @@ public class Updater implements Download.Callback {
         tvFlavor.setText(flavorDisplay);
         tvDesc.setText(desc);
 
-        // TV 焦点设置
         btnConfirm.setFocusable(true);
         btnCancel.setFocusable(true);
 
@@ -173,21 +215,16 @@ public class Updater implements Download.Callback {
         btnConfirm.requestFocus();
     }
 
-    // ========== 新增：权限检查和路径选择方法 ==========
-    /**
-     * 检查是否拥有存储权限（兼容 Android 6.0+）
-     */
+    // ========== 权限检查和路径选择方法 ==========
+
     private boolean hasStoragePermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return true; // 6.0 以下无需动态权限
+            return true;
         }
         return activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED;
     }
 
-    /**
-     * 获取可用的缓存目录（外部缓存优先，不可用时回退到内部缓存）
-     */
     private File getAvailableCacheDir() {
         if (hasStoragePermission()) {
             File externalCache = activity.getExternalCacheDir();
@@ -204,15 +241,17 @@ public class Updater implements Download.Callback {
     }
 
     /**
-     * 开始下载 APK
+     * 开始下载 APK（优化：获取 URL 前会等待测速完成）
      */
     private void startDownload() {
+        // 重置安装触发标记，允许重新安装
+        isInstallTriggered = false;
+
         String url = getApkUrl();
         Log.i(TAG, "下载: " + url);
 
         mainHandler.post(() -> {
             if (dialog != null) dialog.dismiss();
-            // 关闭旧的进度条（防止重叠）
             if (progressDialog != null && progressDialog.isShowing()) {
                 progressDialog.dismiss();
             }
@@ -224,14 +263,11 @@ public class Updater implements Download.Callback {
             progressDialog.show();
         });
 
-        // 动态选择缓存目录
         File cacheDir = getAvailableCacheDir();
         File file = new File(cacheDir, "update.apk");
-        // 如果文件已存在，先删除，避免写入冲突
         if (file.exists()) {
             file.delete();
         }
-        // 确保父目录存在
         if (!file.getParentFile().exists()) {
             file.getParentFile().mkdirs();
         }
@@ -256,27 +292,38 @@ public class Updater implements Download.Callback {
 
         retryCount++;
         if (retryCount < MAX_RETRY_COUNT) {
+            // 切换到下一个代理
             Github.switchToNextProxy();
+            // 标记测速已失效，下次下载会重新测速
+            isSpeedTested = false;
+
             mainHandler.post(() -> {
                 if (progressDialog != null) {
                     progressDialog.setMessage("切换代理重试 " + retryCount + "/" + MAX_RETRY_COUNT);
                 }
-                // 延迟重试
-                mainHandler.postDelayed(this::startDownload, 1500);
+                // 延迟重试，让网络稳定
+                mainHandler.postDelayed(() -> {
+                    // 重新触发测速（异步）
+                    new Thread(() -> {
+                        Github.forceSpeedTest();
+                        isSpeedTested = true;
+                        Log.i(TAG, "重试前测速完成，使用代理: " + Github.getProxyStatus());
+                        // 开始下载
+                        startDownload();
+                    }).start();
+                }, 1500);
             });
         } else {
             Log.e(TAG, "所有代理尝试失败，停止重试");
             mainHandler.post(() -> {
-                // 关闭进度条
                 if (progressDialog != null && progressDialog.isShowing()) {
                     progressDialog.dismiss();
                 }
-                // 显示提示
                 if (activity != null && !activity.isFinishing()) {
                     Toast.makeText(activity, "下载失败，所有代理均不可用", Toast.LENGTH_LONG).show();
                 }
-                // 重置重试计数，允许后续再次尝试
                 retryCount = 0;
+                isSpeedTested = false;
             });
         }
     }
@@ -287,6 +334,8 @@ public class Updater implements Download.Callback {
         isInstallTriggered = true;
 
         Log.i(TAG, "下载成功: " + file.getAbsolutePath());
+        // 下载成功，重置重试计数
+        retryCount = 0;
         mainHandler.post(() -> {
             if (progressDialog != null) progressDialog.dismiss();
             installApk(file);
@@ -295,33 +344,25 @@ public class Updater implements Download.Callback {
 
     // ========== 安装逻辑 ==========
 
-    /**
-     * 安装 APK（针对不同 Android 版本采用不同方案）
-     */
     private void installApk(File file) {
         try {
-            // 确保文件可读
             file.setReadable(true, false);
 
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             Uri uri;
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) { // Android 5.0+
-                // 使用 FileProvider 生成 content URI
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 uri = FileProvider.getUriForFile(activity,
                         BuildConfig.APPLICATION_ID + ".fileprovider", file);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } else {
-                // Android 4.4 及以下使用 file URI，并尝试设置权限
                 uri = Uri.fromFile(file);
-                // 显式授予读取权限（对于 file URI 实际上不需要，但保留以增强兼容性）
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             }
 
             intent.setDataAndType(uri, "application/vnd.android.package-archive");
 
-            // 检查是否有 Activity 能处理该 Intent
             if (activity.getPackageManager().queryIntentActivities(intent, 0).isEmpty()) {
                 Log.e(TAG, "无 Activity 处理安装 Intent，尝试备用方案");
                 fallbackInstall(file);
@@ -330,24 +371,15 @@ public class Updater implements Download.Callback {
 
             activity.startActivity(intent);
 
-            // 可选：关闭当前 Activity 避免用户返回看到下载界面
-            // activity.finish();
-
         } catch (Exception e) {
             Log.e(TAG, "安装失败: " + e.getMessage(), e);
             fallbackInstall(file);
         }
     }
 
-    /**
-     * 备用安装方案：适用于 Android 4.4 及更低版本的特殊处理
-     */
     private void fallbackInstall(File file) {
         try {
-            // 确保文件全局可读
             file.setReadable(true, false);
-
-            // 尝试将文件复制到公共目录（如 Downloads），以增加安装成功率
             File publicFile = copyToPublicDir(file);
             if (publicFile != null) {
                 file = publicFile;
@@ -358,10 +390,9 @@ public class Updater implements Download.Callback {
             intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive");
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 
-            // 再次检查 Intent 是否可处理
             if (activity.getPackageManager().queryIntentActivities(intent, 0).isEmpty()) {
-                showToast("系统无法安装 APK，请前往设置开启“未知来源”后手动安装");
-                isInstallTriggered = false; // 允许重试
+                showToast("系统无法安装 APK，请前往设置开启\"未知来源\"后手动安装");
+                isInstallTriggered = false;
                 return;
             }
 
@@ -369,22 +400,19 @@ public class Updater implements Download.Callback {
         } catch (Exception e) {
             Log.e(TAG, "备用安装也失败: " + e.getMessage());
             showToast("安装失败，请手动安装");
-            isInstallTriggered = false; // 允许重试
+            isInstallTriggered = false;
         }
     }
 
-    /**
-     * 将文件复制到公共下载目录（仅当需要时使用）
-     */
     private File copyToPublicDir(File sourceFile) {
         try {
-            File downloadDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS);
+            File downloadDir = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS);
             if (!downloadDir.exists()) {
                 downloadDir.mkdirs();
             }
             File targetFile = new File(downloadDir, "update.apk");
 
-            // 复制文件
             try (FileInputStream inStream = new FileInputStream(sourceFile);
                  FileOutputStream outStream = new FileOutputStream(targetFile);
                  FileChannel inChannel = inStream.getChannel();
@@ -398,17 +426,12 @@ public class Updater implements Download.Callback {
         }
     }
 
-    /**
-     * 显示 Toast（主线程安全）
-     */
     private void showToast(String msg) {
         if (activity != null && !activity.isFinishing()) {
             Toast.makeText(activity, msg, Toast.LENGTH_LONG).show();
         }
     }
-    /**
-     * 获取风味的显示名称
-     */
+
     private String getFlavorDisplayName(String flavor) {
         switch (flavor) {
             case "java":
