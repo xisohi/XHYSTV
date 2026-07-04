@@ -36,19 +36,16 @@ import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 
 /**
- * TVBox 应用更新管理器（优化版）
- * 改进：
+ * TVBox 应用更新管理器
+ * 特性：
  * 1. 下载前自动选择最快代理（利用 Github 类的测速功能）
  * 2. 启动时不测速，节省资源
  * 3. 24小时缓存测速结果
- * 4. 保留原有重试机制作为降级方案
- * 5. 修复 Android 4.4 兼容性问题
- * 6. 代理失败自动切换下一个代理
+ * 4. 代理失败自动按速度优先级切换下一个代理
+ * 5. 兼容 Android 4.4 - Android 15
  */
 public class Updater {
     private static final String TAG = "Updater";
-    private static final int MAX_RETRY_COUNT = 4;
-    private static final int PRE_CHECK_TIMEOUT = 5000; // 预检超时 5 秒
 
     private Activity activity;
     private Handler mainHandler;
@@ -57,9 +54,7 @@ public class Updater {
     private int retryCount = 0;
     private boolean forceCheck = false;
     private boolean silentMode = false;
-    private String apkName;
     private boolean isInstallTriggered = false;
-    private boolean isSpeedTested = false; // 标记是否已完成测速
 
     public static Updater create() {
         return new Updater();
@@ -81,10 +76,7 @@ public class Updater {
 
     public void start(Activity activity) {
         this.activity = activity;
-
-        if (forceCheck && !silentMode) {
-            showToast("正在检查更新...");
-        }
+        notifyUser("正在检查更新...");
         new Thread(this::checkUpdate).start();
     }
 
@@ -96,32 +88,23 @@ public class Updater {
     }
 
     /**
-     * 获取 APK 下载地址（已加速）
-     * 优化：在获取 URL 前确保测速已完成（最多等待 5 秒）
+     * 获取 APK 名称（根据当前 flavor）
      */
-    private String getApkUrl() {
-        apkName = "XHYSTV-" + BuildConfig.FLAVOR;
-
-        // 如果还未测速，等待测速完成（最多等待 PRE_CHECK_TIMEOUT）
-        if (!isSpeedTested) {
-            Log.d(TAG, "等待测速完成...");
-            long startTime = System.currentTimeMillis();
-            while (!isSpeedTested && (System.currentTimeMillis() - startTime) < PRE_CHECK_TIMEOUT) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    break;
-                }
-            }
-            if (!isSpeedTested) {
-                Log.w(TAG, "测速超时，使用默认代理");
-            } else {
-                Log.i(TAG, "测速完成，使用最快代理下载");
-            }
+    private String getApkName() {
+        String flavor = BuildConfig.FLAVOR;
+        if (flavor == null || flavor.isEmpty()) {
+            flavor = "java";
         }
+        return "XHYSTV-" + flavor;
+    }
 
-        return Github.getApk(apkName);
+    /**
+     * 用户通知（仅在手动检查且非静默模式下显示）
+     */
+    private void notifyUser(String msg) {
+        if (forceCheck && !silentMode) {
+            showToast(msg);
+        }
     }
 
     /**
@@ -149,15 +132,11 @@ public class Updater {
                 String desc = json.optString("desc", "暂无更新说明");
                 mainHandler.post(() -> showUpdateDialog(name, desc));
             } else {
-                if (forceCheck && !silentMode) {
-                    mainHandler.post(() -> showToast("当前已是最新版本"));
-                }
+                notifyUser("当前已是最新版本");
             }
         } catch (Exception e) {
             Log.e(TAG, "检查失败: " + e.getMessage());
-            if (forceCheck && !silentMode) {
-                mainHandler.post(() -> showToast("检查更新失败: " + e.getMessage()));
-            }
+            notifyUser("检查更新失败: " + e.getMessage());
         }
     }
 
@@ -176,9 +155,7 @@ public class Updater {
         TextView btnCancel = view.findViewById(R.id.cancel);
 
         tvVersion.setText(activity.getString(R.string.update_version, version));
-        String flavor = BuildConfig.FLAVOR;
-        String flavorDisplay = getFlavorDisplayName(flavor);
-        tvFlavor.setText(flavorDisplay);
+        tvFlavor.setText(getFlavorDisplayName(BuildConfig.FLAVOR));
         tvDesc.setText(desc);
 
         btnConfirm.setFocusable(true);
@@ -194,61 +171,36 @@ public class Updater {
         btnConfirm.setOnClickListener(v -> {
             btnConfirm.setEnabled(false);
             btnConfirm.setText("准备下载...");
-
-            // 显示提示，告知用户正在选择最优线路
             showToast("正在选择最优下载线路...");
 
-            // 在后台线程测速
+            // 后台测速，完成后在主线程下载
             new Thread(() -> {
                 try {
-                    // 执行测速（同步，但不会阻塞 UI）
                     Github.forceSpeedTest();
-                    isSpeedTested = true;
                     Log.i(TAG, "测速完成，开始下载");
-
-                    // 切回主线程执行实际下载
-                    mainHandler.post(() -> {
-                        // 重置安装触发标记和重试计数
-                        isInstallTriggered = false;
-                        retryCount = 0;
-                        // 执行实际下载
-                        doDownload();
-                    });
                 } catch (Exception e) {
                     Log.e(TAG, "测速失败: " + e.getMessage());
-                    // 测速失败也继续下载（使用默认代理）
-                    mainHandler.post(() -> {
-                        isInstallTriggered = false;
-                        retryCount = 0;
-                        doDownload();
-                    });
                 }
+                mainHandler.post(() -> {
+                    isInstallTriggered = false;
+                    retryCount = 0;
+                    doDownload();
+                });
             }).start();
         });
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
-
         btnConfirm.requestFocus();
     }
 
     /**
      * 实际执行下载
-     * 使用 retryCount 作为代理索引，自动切换代理
+     * 使用 retryCount 作为代理索引，自动按速度优先级切换代理
      */
     private void doDownload() {
-        // 先确保 apkName 有值（移到最开头）
-        if (apkName == null || apkName.isEmpty()) {
-            String flavor = BuildConfig.FLAVOR;
-            if (flavor == null || flavor.isEmpty()) {
-                flavor = "java";
-            }
-            apkName = "XHYSTV-" + flavor;
-            Log.w(TAG, "apkName 为空，使用默认值: " + apkName);
-        }
-        // 重置安装触发标记
-        isInstallTriggered = false;
+        String apkName = getApkName();
 
-        // 检查重试次数，防止超出代理数量
+        // 检查重试次数
         int proxyCount = Github.getProxyCount();
         if (retryCount >= proxyCount) {
             Log.w(TAG, "所有 " + proxyCount + " 个代理均已尝试，停止下载");
@@ -262,20 +214,7 @@ public class Updater {
 
         Log.d(TAG, "开始第 " + (retryCount + 1) + "/" + proxyCount + " 次下载尝试");
 
-        // ✅ 确保 apkName 不为空
-        if (apkName == null || apkName.isEmpty()) {
-            String flavor = BuildConfig.FLAVOR;
-            if (flavor == null || flavor.isEmpty()) {
-                flavor = "java";
-            }
-            apkName = "XHYSTV-" + flavor;
-            Log.w(TAG, "apkName 为空，使用默认值: " + apkName);
-        }
-
-        // 获取 GitHub 原始文件路径（不包含代理）
         String githubUrl = "https://github.com/xisohi/XHYSosc/releases/download/XHYSTV/" + apkName + ".apk";
-
-        // 使用 retryCount 作为代理索引，自动切换到下一个代理
         String url = Github.getProxyUrlByIndex(githubUrl, retryCount);
         retryCount++;
 
@@ -322,7 +261,6 @@ public class Updater {
                     mainHandler.post(() -> {
                         dismissProgressDialog();
                         showToast("OkHttpClient 未初始化");
-                        isInstallTriggered = false;
                     });
                     return;
                 }
@@ -334,8 +272,7 @@ public class Updater {
 
                 response = client.newCall(request).execute();
                 if (!response.isSuccessful()) {
-                    String errorMsg = "下载失败: " + response.code();
-                    Log.e(TAG, errorMsg);
+                    Log.e(TAG, "下载失败: " + response.code());
                     mainHandler.post(() -> {
                         dismissProgressDialog();
                         showToast("下载失败，切换代理重试...");
@@ -373,7 +310,6 @@ public class Updater {
 
                 // 下载成功，重置重试计数
                 retryCount = 0;
-                Github.resetRetry();
                 mainHandler.post(() -> {
                     dismissProgressDialog();
                     installApk(file);
@@ -387,7 +323,6 @@ public class Updater {
                     mainHandler.postDelayed(() -> doDownload(), 1500);
                 });
             } finally {
-                // 确保资源关闭，兼容 Android 4.4 Dalvik
                 if (outputStream != null) {
                     try { outputStream.close(); } catch (IOException e) { /* ignore */ }
                 }
@@ -401,11 +336,11 @@ public class Updater {
         }).start();
     }
 
-    // ========== 权限检查和路径选择方法 ==========
+    // ========== 权限检查和路径选择 ==========
 
     private boolean hasStoragePermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return true; // API 23 以下默认有权限
+            return true;
         }
         return ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED;
@@ -417,8 +352,6 @@ public class Updater {
             if (externalCache != null && externalCache.canWrite()) {
                 Log.d(TAG, "使用外部缓存目录: " + externalCache.getPath());
                 return externalCache;
-            } else {
-                Log.d(TAG, "外部缓存不可用，回退到内部缓存");
             }
         }
         File internalCache = activity.getCacheDir();
@@ -440,12 +373,10 @@ public class Updater {
             Uri uri;
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                // API 21+ 使用 FileProvider
                 uri = FileProvider.getUriForFile(activity,
                         BuildConfig.APPLICATION_ID + ".fileprovider", file);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } else {
-                // API 19-20 直接使用文件 URI
                 uri = Uri.fromFile(file);
             }
 
@@ -492,22 +423,13 @@ public class Updater {
         }
     }
 
-    /**
-     * 复制文件到公共目录，兼容 Android 4.4 - Android 15
-     */
     private File copyToPublicDir(File sourceFile) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            // API 29+ 使用 MediaStore
             return copyToPublicDirMediaStore(sourceFile);
-        } else {
-            // API 19-28 使用传统方式
-            return copyToPublicDirLegacy(sourceFile);
         }
+        return copyToPublicDirLegacy(sourceFile);
     }
 
-    /**
-     * API 29+ (Android 10+) 使用 MediaStore 插入 Download
-     */
     private File copyToPublicDirMediaStore(File sourceFile) {
         FileInputStream inStream = null;
         OutputStream outStream = null;
@@ -515,16 +437,11 @@ public class Updater {
             ContentValues values = new ContentValues();
             values.put(MediaStore.MediaColumns.DISPLAY_NAME, "update.apk");
             values.put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive");
-            // API 29+ 字段，用字符串常量避免编译错误
             values.put("relative_path", Environment.DIRECTORY_DOWNLOADS);
 
-            // 使用字符串 URI 代替 MediaStore.Downloads.EXTERNAL_CONTENT_URI
-            Uri downloadUri = Uri.parse("content://media/external/downloads");
-            Uri uri = activity.getContentResolver().insert(downloadUri, values);
-            if (uri == null) {
-                Log.e(TAG, "MediaStore 插入失败");
-                return null;
-            }
+            Uri uri = activity.getContentResolver().insert(
+                    Uri.parse("content://media/external/downloads"), values);
+            if (uri == null) return null;
 
             outStream = activity.getContentResolver().openOutputStream(uri);
             inStream = new FileInputStream(sourceFile);
@@ -535,31 +452,29 @@ public class Updater {
             }
             outStream.flush();
 
-            return new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "update.apk");
+            return new File(Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS), "update.apk");
         } catch (Exception e) {
             Log.e(TAG, "MediaStore 复制失败: " + e.getMessage());
             return null;
         } finally {
             if (outStream != null) {
-                try { outStream.close(); } catch (IOException e) { /* ignore */ }
+                try { outStream.close(); } catch (IOException e) { }
             }
             if (inStream != null) {
-                try { inStream.close(); } catch (IOException e) { /* ignore */ }
+                try { inStream.close(); } catch (IOException e) { }
             }
         }
     }
 
-    /**
-     * API 19-28 使用传统方式复制到 Download
-     */
     private File copyToPublicDirLegacy(File sourceFile) {
         FileInputStream inStream = null;
         FileOutputStream outStream = null;
         FileChannel inChannel = null;
         FileChannel outChannel = null;
         try {
-            File downloadDir = android.os.Environment.getExternalStoragePublicDirectory(
-                    android.os.Environment.DIRECTORY_DOWNLOADS);
+            File downloadDir = Environment.getExternalStoragePublicDirectory(
+                    Environment.DIRECTORY_DOWNLOADS);
             if (!downloadDir.exists()) {
                 downloadDir.mkdirs();
             }
@@ -576,23 +491,22 @@ public class Updater {
             return null;
         } finally {
             if (outChannel != null) {
-                try { outChannel.close(); } catch (IOException e) { /* ignore */ }
+                try { outChannel.close(); } catch (IOException e) { }
             }
             if (inChannel != null) {
-                try { inChannel.close(); } catch (IOException e) { /* ignore */ }
+                try { inChannel.close(); } catch (IOException e) { }
             }
             if (outStream != null) {
-                try { outStream.close(); } catch (IOException e) { /* ignore */ }
+                try { outStream.close(); } catch (IOException e) { }
             }
             if (inStream != null) {
-                try { inStream.close(); } catch (IOException e) { /* ignore */ }
+                try { inStream.close(); } catch (IOException e) { }
             }
         }
     }
 
-    /**
-     * 安全关闭 ProgressDialog
-     */
+    // ========== 工具方法 ==========
+
     private void dismissProgressDialog() {
         if (activity != null && !activity.isFinishing()
                 && progressDialog != null && progressDialog.isShowing()) {
@@ -609,20 +523,13 @@ public class Updater {
     private String getFlavorDisplayName(String flavor) {
         if (flavor == null) return "未知版本";
         switch (flavor) {
-            case "java":
-                return "Java通用版";
-            case "java32":
-                return "Java 32位版";
-            case "java64":
-                return "Java 64位版";
-            case "python":
-                return "Python通用版";
-            case "python32":
-                return "Python 32位版";
-            case "python64":
-                return "Python 64位版";
-            default:
-                return flavor;
+            case "java": return "Java通用版";
+            case "java32": return "Java 32位版";
+            case "java64": return "Java 64位版";
+            case "python": return "Python通用版";
+            case "python32": return "Python 32位版";
+            case "python64": return "Python 64位版";
+            default: return flavor;
         }
     }
 }
