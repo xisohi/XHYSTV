@@ -3,12 +3,15 @@ package com.github.tvbox.osc.util;
 import android.Manifest;
 import android.app.Activity;
 import android.app.ProgressDialog;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -16,14 +19,12 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
 import com.github.tvbox.osc.BuildConfig;
 import com.github.tvbox.osc.R;
 import com.lzy.okgo.OkGo;
-import com.lzy.okgo.callback.FileCallback;
-import com.lzy.okgo.model.Progress;
-import com.lzy.okgo.model.Response;
 
 import org.json.JSONObject;
 
@@ -31,6 +32,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.channels.FileChannel;
 
 /**
@@ -40,8 +42,10 @@ import java.nio.channels.FileChannel;
  * 2. 启动时不测速，节省资源
  * 3. 24小时缓存测速结果
  * 4. 保留原有重试机制作为降级方案
+ * 5. 修复 Android 4.4 兼容性问题
+ * 6. 代理失败自动切换下一个代理
  */
-public class Updater implements Download.Callback {
+public class Updater {
     private static final String TAG = "Updater";
     private static final int MAX_RETRY_COUNT = 4;
     private static final int PRE_CHECK_TIMEOUT = 5000; // 预检超时 5 秒
@@ -204,8 +208,9 @@ public class Updater implements Download.Callback {
 
                     // 切回主线程执行实际下载
                     mainHandler.post(() -> {
-                        // 重置安装触发标记
+                        // 重置安装触发标记和重试计数
                         isInstallTriggered = false;
+                        retryCount = 0;
                         // 执行实际下载
                         doDownload();
                     });
@@ -214,6 +219,7 @@ public class Updater implements Download.Callback {
                     // 测速失败也继续下载（使用默认代理）
                     mainHandler.post(() -> {
                         isInstallTriggered = false;
+                        retryCount = 0;
                         doDownload();
                     });
                 }
@@ -227,32 +233,78 @@ public class Updater implements Download.Callback {
 
     /**
      * 实际执行下载
-     */
-    /**
-     * 实际执行下载
+     * 使用 retryCount 作为代理索引，自动切换代理
      */
     private void doDownload() {
-        // 重置安装触发标记，允许重新安装
+        // 先确保 apkName 有值（移到最开头）
+        if (apkName == null || apkName.isEmpty()) {
+            String flavor = BuildConfig.FLAVOR;
+            if (flavor == null || flavor.isEmpty()) {
+                flavor = "java";
+            }
+            apkName = "XHYSTV-" + flavor;
+            Log.w(TAG, "apkName 为空，使用默认值: " + apkName);
+        }
+        // 重置安装触发标记
         isInstallTriggered = false;
 
-        String url = getApkUrl();
+        // 检查重试次数，防止超出代理数量
+        int proxyCount = Github.getProxyCount();
+        if (retryCount >= proxyCount) {
+            Log.w(TAG, "所有 " + proxyCount + " 个代理均已尝试，停止下载");
+            retryCount = 0;
+            mainHandler.post(() -> {
+                dismissProgressDialog();
+                showToast("所有下载线路均失败，请检查网络后重试");
+            });
+            return;
+        }
+
+        Log.d(TAG, "开始第 " + (retryCount + 1) + "/" + proxyCount + " 次下载尝试");
+
+        // ✅ 确保 apkName 不为空
+        if (apkName == null || apkName.isEmpty()) {
+            String flavor = BuildConfig.FLAVOR;
+            if (flavor == null || flavor.isEmpty()) {
+                flavor = "java";
+            }
+            apkName = "XHYSTV-" + flavor;
+            Log.w(TAG, "apkName 为空，使用默认值: " + apkName);
+        }
+
+        // 获取 GitHub 原始文件路径（不包含代理）
+        String githubUrl = "https://github.com/xisohi/XHYSosc/releases/download/XHYSTV/" + apkName + ".apk";
+
+        // 使用 retryCount 作为代理索引，自动切换到下一个代理
+        String url = Github.getProxyUrlByIndex(githubUrl, retryCount);
+        retryCount++;
+
+        if (url == null) {
+            Log.e(TAG, "无可用代理");
+            mainHandler.post(() -> {
+                dismissProgressDialog();
+                showToast("所有代理均不可用，下载失败");
+            });
+            return;
+        }
+
         Log.i(TAG, "下载: " + url);
 
         mainHandler.post(() -> {
-            if (dialog != null) dialog.dismiss();
-            if (progressDialog != null && progressDialog.isShowing()) {
-                progressDialog.dismiss();
-            }
+            if (dialog != null && dialog.isShowing()) dialog.dismiss();
+            dismissProgressDialog();
             progressDialog = new ProgressDialog(activity);
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setTitle("正在下载");
             progressDialog.setMax(100);
             progressDialog.setCancelable(false);
-            progressDialog.show();
+            if (activity != null && !activity.isFinishing()) {
+                progressDialog.show();
+            }
         });
 
         File cacheDir = getAvailableCacheDir();
-        File file = new File(cacheDir, "update.apk");
+        final File file = new File(cacheDir, "update.apk");
         if (file.exists()) {
             file.delete();
         }
@@ -260,16 +312,102 @@ public class Updater implements Download.Callback {
             file.getParentFile().mkdirs();
         }
 
-        Download.create(url, file).start(this);
+        new Thread(() -> {
+            okhttp3.Response response = null;
+            java.io.InputStream inputStream = null;
+            java.io.FileOutputStream outputStream = null;
+            try {
+                okhttp3.OkHttpClient client = OkGoHelper.getDefaultClient();
+                if (client == null) {
+                    mainHandler.post(() -> {
+                        dismissProgressDialog();
+                        showToast("OkHttpClient 未初始化");
+                        isInstallTriggered = false;
+                    });
+                    return;
+                }
+
+                okhttp3.Request request = new okhttp3.Request.Builder()
+                        .url(url)
+                        .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                        .build();
+
+                response = client.newCall(request).execute();
+                if (!response.isSuccessful()) {
+                    String errorMsg = "下载失败: " + response.code();
+                    Log.e(TAG, errorMsg);
+                    mainHandler.post(() -> {
+                        dismissProgressDialog();
+                        showToast("下载失败，切换代理重试...");
+                        mainHandler.postDelayed(() -> doDownload(), 1500);
+                    });
+                    return;
+                }
+
+                long contentLength = response.body().contentLength();
+                inputStream = response.body().byteStream();
+                outputStream = new java.io.FileOutputStream(file);
+                byte[] buffer = new byte[8192];
+                long totalRead = 0;
+                int len;
+                int lastPercent = -1;
+
+                while ((len = inputStream.read(buffer)) != -1) {
+                    outputStream.write(buffer, 0, len);
+                    totalRead += len;
+                    if (contentLength > 0) {
+                        int percent = (int) (totalRead * 100 / contentLength);
+                        if (percent != lastPercent) {
+                            lastPercent = percent;
+                            int finalPercent = percent;
+                            mainHandler.post(() -> {
+                                if (progressDialog != null && progressDialog.isShowing()
+                                        && activity != null && !activity.isFinishing()) {
+                                    progressDialog.setProgress(finalPercent);
+                                }
+                            });
+                        }
+                    }
+                }
+                outputStream.flush();
+
+                // 下载成功，重置重试计数
+                retryCount = 0;
+                Github.resetRetry();
+                mainHandler.post(() -> {
+                    dismissProgressDialog();
+                    installApk(file);
+                });
+
+            } catch (Exception e) {
+                Log.e(TAG, "下载异常: " + e.getMessage());
+                mainHandler.post(() -> {
+                    dismissProgressDialog();
+                    showToast("下载异常，切换代理重试...");
+                    mainHandler.postDelayed(() -> doDownload(), 1500);
+                });
+            } finally {
+                // 确保资源关闭，兼容 Android 4.4 Dalvik
+                if (outputStream != null) {
+                    try { outputStream.close(); } catch (IOException e) { /* ignore */ }
+                }
+                if (inputStream != null) {
+                    try { inputStream.close(); } catch (IOException e) { /* ignore */ }
+                }
+                if (response != null) {
+                    response.close();
+                }
+            }
+        }).start();
     }
 
     // ========== 权限检查和路径选择方法 ==========
 
     private boolean hasStoragePermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
-            return true;
+            return true; // API 23 以下默认有权限
         }
-        return activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        return ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED;
     }
 
@@ -288,88 +426,12 @@ public class Updater implements Download.Callback {
         return internalCache;
     }
 
-    // ========== Download.Callback 实现 ==========
-
-    @Override
-    public void progress(int progress) {
-        mainHandler.post(() -> {
-            if (progressDialog != null) {
-                progressDialog.setProgress(progress);
-            }
-        });
-    }
-
-    @Override
-    public void error(String msg) {
-        Log.e(TAG, "下载错误: " + msg + ", retryCount=" + retryCount);
-
-        retryCount++;
-        if (retryCount < MAX_RETRY_COUNT) {
-            // 切换到下一个代理
-            Github.switchToNextProxy();
-            // 标记测速已失效，下次下载会重新测速
-            isSpeedTested = false;
-
-            mainHandler.post(() -> {
-                if (progressDialog != null) {
-                    progressDialog.setMessage("切换代理重试 " + retryCount + "/" + MAX_RETRY_COUNT);
-                }
-                // 延迟重试，让网络稳定
-                mainHandler.postDelayed(() -> {
-                    // 重新触发测速（异步）
-                    new Thread(() -> {
-                        try {
-                            Github.forceSpeedTest();
-                            isSpeedTested = true;
-                            Log.i(TAG, "重试前测速完成，使用代理: " + Github.getProxyStatus());
-                            // 开始下载
-                            mainHandler.post(() -> {
-                                isInstallTriggered = false;
-                                doDownload();
-                            });
-                        } catch (Exception e) {
-                            Log.e(TAG, "重试测速失败: " + e.getMessage());
-                            // 测速失败也继续下载
-                            mainHandler.post(() -> {
-                                isInstallTriggered = false;
-                                doDownload();
-                            });
-                        }
-                    }).start();
-                }, 1500);
-            });
-        } else {
-            Log.e(TAG, "所有代理尝试失败，停止重试");
-            mainHandler.post(() -> {
-                if (progressDialog != null && progressDialog.isShowing()) {
-                    progressDialog.dismiss();
-                }
-                if (activity != null && !activity.isFinishing()) {
-                    Toast.makeText(activity, "下载失败，所有代理均不可用", Toast.LENGTH_LONG).show();
-                }
-                retryCount = 0;
-                isSpeedTested = false;
-            });
-        }
-    }
-
-    @Override
-    public void success(File file) {
-        if (isInstallTriggered) return;
-        isInstallTriggered = true;
-
-        Log.i(TAG, "下载成功: " + file.getAbsolutePath());
-        // 下载成功，重置重试计数
-        retryCount = 0;
-        mainHandler.post(() -> {
-            if (progressDialog != null) progressDialog.dismiss();
-            installApk(file);
-        });
-    }
-
     // ========== 安装逻辑 ==========
 
     private void installApk(File file) {
+        if (isInstallTriggered) return;
+        isInstallTriggered = true;
+
         try {
             file.setReadable(true, false);
 
@@ -378,12 +440,13 @@ public class Updater implements Download.Callback {
             Uri uri;
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                // API 21+ 使用 FileProvider
                 uri = FileProvider.getUriForFile(activity,
                         BuildConfig.APPLICATION_ID + ".fileprovider", file);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } else {
+                // API 19-20 直接使用文件 URI
                 uri = Uri.fromFile(file);
-                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
             }
 
             intent.setDataAndType(uri, "application/vnd.android.package-archive");
@@ -429,7 +492,71 @@ public class Updater implements Download.Callback {
         }
     }
 
+    /**
+     * 复制文件到公共目录，兼容 Android 4.4 - Android 15
+     */
     private File copyToPublicDir(File sourceFile) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // API 29+ 使用 MediaStore
+            return copyToPublicDirMediaStore(sourceFile);
+        } else {
+            // API 19-28 使用传统方式
+            return copyToPublicDirLegacy(sourceFile);
+        }
+    }
+
+    /**
+     * API 29+ (Android 10+) 使用 MediaStore 插入 Download
+     */
+    private File copyToPublicDirMediaStore(File sourceFile) {
+        FileInputStream inStream = null;
+        OutputStream outStream = null;
+        try {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, "update.apk");
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive");
+            // API 29+ 字段，用字符串常量避免编译错误
+            values.put("relative_path", Environment.DIRECTORY_DOWNLOADS);
+
+            // 使用字符串 URI 代替 MediaStore.Downloads.EXTERNAL_CONTENT_URI
+            Uri downloadUri = Uri.parse("content://media/external/downloads");
+            Uri uri = activity.getContentResolver().insert(downloadUri, values);
+            if (uri == null) {
+                Log.e(TAG, "MediaStore 插入失败");
+                return null;
+            }
+
+            outStream = activity.getContentResolver().openOutputStream(uri);
+            inStream = new FileInputStream(sourceFile);
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = inStream.read(buffer)) != -1) {
+                outStream.write(buffer, 0, len);
+            }
+            outStream.flush();
+
+            return new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "update.apk");
+        } catch (Exception e) {
+            Log.e(TAG, "MediaStore 复制失败: " + e.getMessage());
+            return null;
+        } finally {
+            if (outStream != null) {
+                try { outStream.close(); } catch (IOException e) { /* ignore */ }
+            }
+            if (inStream != null) {
+                try { inStream.close(); } catch (IOException e) { /* ignore */ }
+            }
+        }
+    }
+
+    /**
+     * API 19-28 使用传统方式复制到 Download
+     */
+    private File copyToPublicDirLegacy(File sourceFile) {
+        FileInputStream inStream = null;
+        FileOutputStream outStream = null;
+        FileChannel inChannel = null;
+        FileChannel outChannel = null;
         try {
             File downloadDir = android.os.Environment.getExternalStoragePublicDirectory(
                     android.os.Environment.DIRECTORY_DOWNLOADS);
@@ -438,16 +565,38 @@ public class Updater implements Download.Callback {
             }
             File targetFile = new File(downloadDir, "update.apk");
 
-            try (FileInputStream inStream = new FileInputStream(sourceFile);
-                 FileOutputStream outStream = new FileOutputStream(targetFile);
-                 FileChannel inChannel = inStream.getChannel();
-                 FileChannel outChannel = outStream.getChannel()) {
-                inChannel.transferTo(0, inChannel.size(), outChannel);
-            }
+            inStream = new FileInputStream(sourceFile);
+            outStream = new FileOutputStream(targetFile);
+            inChannel = inStream.getChannel();
+            outChannel = outStream.getChannel();
+            inChannel.transferTo(0, inChannel.size(), outChannel);
             return targetFile;
         } catch (IOException e) {
             Log.e(TAG, "复制文件失败: " + e.getMessage());
             return null;
+        } finally {
+            if (outChannel != null) {
+                try { outChannel.close(); } catch (IOException e) { /* ignore */ }
+            }
+            if (inChannel != null) {
+                try { inChannel.close(); } catch (IOException e) { /* ignore */ }
+            }
+            if (outStream != null) {
+                try { outStream.close(); } catch (IOException e) { /* ignore */ }
+            }
+            if (inStream != null) {
+                try { inStream.close(); } catch (IOException e) { /* ignore */ }
+            }
+        }
+    }
+
+    /**
+     * 安全关闭 ProgressDialog
+     */
+    private void dismissProgressDialog() {
+        if (activity != null && !activity.isFinishing()
+                && progressDialog != null && progressDialog.isShowing()) {
+            progressDialog.dismiss();
         }
     }
 
@@ -458,6 +607,7 @@ public class Updater implements Download.Callback {
     }
 
     private String getFlavorDisplayName(String flavor) {
+        if (flavor == null) return "未知版本";
         switch (flavor) {
             case "java":
                 return "Java通用版";

@@ -43,9 +43,11 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.X509TrustManager;
 
 import okhttp3.Cache;
+import okhttp3.ConnectionSpec;
 import okhttp3.Dns;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
+import okhttp3.TlsVersion;
 import okhttp3.dnsoverhttps.DnsOverHttps;
 import okhttp3.internal.Version;
 import xyz.doikki.videoplayer.exo.ExoMediaSourceHelper;
@@ -202,6 +204,14 @@ public class OkGoHelper {
         } catch (Throwable th) {
             th.printStackTrace();
         }
+        // ===== Android 4.4 兼容 =====
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
+            ConnectionSpec spec = new ConnectionSpec.Builder(ConnectionSpec.COMPATIBLE_TLS)
+                    .tlsVersions(TlsVersion.TLS_1_2)
+                    .build();
+            builder.connectionSpecs(Arrays.asList(spec, ConnectionSpec.CLEARTEXT));
+        }
+        // ============================
         builder.cache(new Cache(new File(App.getInstance().getCacheDir().getAbsolutePath(), "dohcache"), 100 * 1024 * 1024));
         OkHttpClient dohClient = builder.build();
         String dohUrl = getDohUrl(Hawk.get(HawkConfig.DOH_URL, 0));
@@ -339,6 +349,15 @@ public class OkGoHelper {
             th.printStackTrace();
         }
 
+        // ===== Android 4.4 兼容 =====
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
+            ConnectionSpec spec = new ConnectionSpec.Builder(ConnectionSpec.COMPATIBLE_TLS)
+                    .tlsVersions(TlsVersion.TLS_1_2)
+                    .build();
+            builder.connectionSpecs(Arrays.asList(spec, ConnectionSpec.CLEARTEXT));
+        }
+// ============================
+
         HttpHeaders.setUserAgent(Version.userAgent());
 
         OkHttpClient okHttpClient = builder.build();
@@ -383,6 +402,16 @@ public class OkGoHelper {
             th.printStackTrace();
         }
 
+        // ===== Android 4.4 兼容 =====
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
+            ConnectionSpec spec = new ConnectionSpec.Builder(ConnectionSpec.COMPATIBLE_TLS)
+                    .tlsVersions(TlsVersion.TLS_1_2)
+                    .build();
+            // 允许明文 HTTP 通信
+            builder.connectionSpecs(Arrays.asList(spec, ConnectionSpec.CLEARTEXT));
+        }
+// ============================
+
         HttpHeaders.setUserAgent(Version.userAgent());
 
         OkHttpClient okHttpClient = builder.build();
@@ -411,23 +440,64 @@ public class OkGoHelper {
 
     private static synchronized void setOkHttpSsl(OkHttpClient.Builder builder) {
         try {
-            // 自定义一个信任所有证书的TrustManager，添加SSLSocketFactory的时候要用到
-            final X509TrustManager trustAllCert =
-                    new X509TrustManager() {
-                        @Override
-                        public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
-                        }
+            final X509TrustManager trustAllCert = new X509TrustManager() {
+                @Override
+                public void checkClientTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {}
+                @Override
+                public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {}
+                @Override
+                public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+                    return new java.security.cert.X509Certificate[]{};
+                }
+            };
 
-                        @Override
-                        public void checkServerTrusted(java.security.cert.X509Certificate[] chain, String authType) throws CertificateException {
-                        }
+            final SSLSocketFactory sslSocketFactory;
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.LOLLIPOP) {
+                // API 19-20: 强制 TLS 1.2
+                javax.net.ssl.SSLContext sslContext = javax.net.ssl.SSLContext.getInstance("TLSv1.2", "Conscrypt");
+                sslContext.init(null, new javax.net.ssl.TrustManager[]{trustAllCert}, new java.security.SecureRandom());
 
-                        @Override
-                        public java.security.cert.X509Certificate[] getAcceptedIssuers() {
-                            return new java.security.cert.X509Certificate[]{};
+                final javax.net.ssl.SSLSocketFactory delegate = sslContext.getSocketFactory();
+                sslSocketFactory = new javax.net.ssl.SSLSocketFactory() {
+                    @Override
+                    public String[] getDefaultCipherSuites() {
+                        return delegate.getDefaultCipherSuites();
+                    }
+                    @Override
+                    public String[] getSupportedCipherSuites() {
+                        return delegate.getSupportedCipherSuites();
+                    }
+                    private java.net.Socket enableTls12(java.net.Socket socket) {
+                        if (socket instanceof javax.net.ssl.SSLSocket) {
+                            ((javax.net.ssl.SSLSocket) socket).setEnabledProtocols(new String[]{"TLSv1.2"});
                         }
-                    };
-            final SSLSocketFactory sslSocketFactory = new SSLSocketFactoryCompat(trustAllCert);
+                        return socket;
+                    }
+                    @Override
+                    public java.net.Socket createSocket(java.net.Socket s, String host, int port, boolean autoClose) throws java.io.IOException {
+                        return enableTls12(delegate.createSocket(s, host, port, autoClose));
+                    }
+                    @Override
+                    public java.net.Socket createSocket(String host, int port) throws java.io.IOException, java.net.UnknownHostException {
+                        return enableTls12(delegate.createSocket(host, port));
+                    }
+                    @Override
+                    public java.net.Socket createSocket(String host, int port, java.net.InetAddress localHost, int localPort) throws java.io.IOException, java.net.UnknownHostException {
+                        return enableTls12(delegate.createSocket(host, port, localHost, localPort));
+                    }
+                    @Override
+                    public java.net.Socket createSocket(java.net.InetAddress host, int port) throws java.io.IOException {
+                        return enableTls12(delegate.createSocket(host, port));
+                    }
+                    @Override
+                    public java.net.Socket createSocket(java.net.InetAddress address, int port, java.net.InetAddress localAddress, int localPort) throws java.io.IOException {
+                        return enableTls12(delegate.createSocket(address, port, localAddress, localPort));
+                    }
+                };
+            } else {
+                sslSocketFactory = new SSLSocketFactoryCompat(trustAllCert);
+            }
+
             builder.sslSocketFactory(sslSocketFactory, trustAllCert);
             builder.hostnameVerifier(HttpsUtils.UnSafeHostnameVerifier);
         } catch (Exception e) {

@@ -1,6 +1,9 @@
 package com.github.tvbox.osc.base;
 
 import android.app.Activity;
+import android.os.Build;
+import android.util.Log;
+
 import androidx.multidex.MultiDexApplication;
 
 import com.github.tvbox.osc.bean.VodInfo;
@@ -20,6 +23,10 @@ import com.orhanobut.hawk.Hawk;
 import com.p2p.P2PClass;
 import com.whl.quickjs.android.QuickJSLoader;
 import com.github.catvod.crawler.JsLoader;
+
+import org.conscrypt.Conscrypt;
+
+import java.security.Security;
 
 import me.jessyan.autosize.AutoSizeConfig;
 import me.jessyan.autosize.unit.Subunits;
@@ -41,6 +48,11 @@ public class App extends MultiDexApplication {
         super.onCreate();
         instance = this;
         initParams();
+        // Android 4.4 启用 Conscrypt 提供 TLS 1.2/1.3 支持
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            Security.insertProviderAt(Conscrypt.newProvider(), 1);
+            Log.i("App", "Conscrypt provider installed for API " + Build.VERSION.SDK_INT);
+        }
         // OKGo
         OkGoHelper.init(); //台标获取
         EpgUtil.init();

@@ -184,7 +184,7 @@ dependencies {
     python32Implementation project(":pyramid")
     python64Implementation project(":pyramid")
 
-
+    implementation 'org.conscrypt:conscrypt-android:2.5.2'
     implementation 'com.lzy.net:okgo:3.0.4'
     // implementation 'com.tencent.bugly:crashreport_upgrade:latest.release'
     implementation 'com.owen:tv-recyclerview:3.0.0'
