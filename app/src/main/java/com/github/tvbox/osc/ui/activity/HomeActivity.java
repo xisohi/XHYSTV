@@ -1002,10 +1002,8 @@ public class HomeActivity extends BaseActivity {
     // 新增权限检查方法
     private void checkPermissionsAndUpdate() {
         if (XXPermissions.isGranted(this, Permission.Group.STORAGE)) {
-            // 已有权限，直接更新
             performUpdate();
         } else {
-            // 请求存储权限
             XXPermissions.with(this)
                     .permission(Permission.Group.STORAGE)
                     .request(new OnPermissionCallback() {
@@ -1025,7 +1023,7 @@ public class HomeActivity extends BaseActivity {
                                 XXPermissions.startPermissionActivity(HomeActivity.this, permissions);
                             } else {
                                 Toast.makeText(HomeActivity.this,
-                                        "获取存储权限失败",
+                                        "需要存储权限才能下载更新",
                                         Toast.LENGTH_SHORT).show();
                             }
                         }
