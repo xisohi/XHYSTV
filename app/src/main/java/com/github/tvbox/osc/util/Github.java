@@ -169,6 +169,46 @@ public class Github {
     }
 
     private static boolean pingProxy(String testUrl) {
+        okhttp3.OkHttpClient client = null;
+        try {
+            client = OkGoHelper.getDefaultClient();
+            if (client == null) {
+                client = OkGoHelper.getItvClient();
+            }
+            if (client == null) {
+                Log.w(TAG, "OkHttpClient未初始化，使用Legacy测速");
+                return pingProxyLegacy(testUrl);
+            }
+
+            okhttp3.OkHttpClient pingClient = client.newBuilder()
+                    .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
+                    .build();
+
+            okhttp3.Request request = new okhttp3.Request.Builder()
+                    .url(testUrl)
+                    .head()
+                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+                    .build();
+
+            try (okhttp3.Response response = pingClient.newCall(request).execute()) {
+                int code = response.code();
+                // 只要服务器有响应（2xx, 3xx, 4xx），我们就认为代理可用
+                // 只有连接错误（IOException）才认为不可达
+                if (code > 0) {
+                    Log.d(TAG, "ping 响应码: " + code + " (代理可达)");
+                    return true;
+                }
+                Log.d(TAG, "ping 返回无效状态码: " + code);
+                return false;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "pingProxy 异常: " + e.getMessage() + ", 降级到Legacy");
+            return pingProxyLegacy(testUrl);
+        }
+    }
+
+    private static boolean pingProxyLegacy(String testUrl) {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(testUrl);
