@@ -21,7 +21,8 @@ public class Github {
             "ghproxy.net/",
             "gh-proxy.org/",
             //Android 5.0+
-            "gh.llkk.cc/",
+            "ghfast.top/",
+            "gh.acmsz.top/",
             "gh.xisohi.dpdns.org/"
     };
 
