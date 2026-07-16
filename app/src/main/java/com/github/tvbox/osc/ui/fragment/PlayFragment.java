@@ -917,10 +917,8 @@ public class PlayFragment extends BaseLazyFragment {
                         }
                         String flag = info.optString("flag");
                         String url = info.getString("url");
-                        String danmaku = info.optString("danmaku", "");
-                        if (DanmakuApi.hasCustomApi()) danmaku = "";
+                        String danmaku = info.optString("danmaku", "").trim();
                         final String danmuProgressKey = progressKey;
-                        boolean fallbackToDefaultSearch = DanmakuApi.isUseDefault() && danmaku.trim().startsWith("http");
                         if(url.startsWith("[")){
                             url=mController.firstUrlByArray(url);
                         }
@@ -940,12 +938,16 @@ public class PlayFragment extends BaseLazyFragment {
                             mController.showParse(false);
                             playUrl(playUrl + url, headers);
                         }
-                        checkDanmu(danmaku, fallbackToDefaultSearch ? () -> {
-                            if (DanmakuApi.isUseDefault() && TextUtils.equals(danmuProgressKey, progressKey)) {
-                                searchDanmu("");
-                            }
-                        } : null);
-                        searchDanmu(danmaku);
+                        if (TextUtils.isEmpty(danmaku)) {
+                            checkDanmu("");
+                            searchDanmu("");
+                        } else {
+                            checkDanmu(danmaku, () -> {
+                                if (TextUtils.equals(danmuProgressKey, progressKey)) {
+                                    searchDanmu("");
+                                }
+                            });
+                        }
                     } catch (Throwable th) {
                         handleResolvePlayUrlFailed("获取播放信息错误");
                     }
