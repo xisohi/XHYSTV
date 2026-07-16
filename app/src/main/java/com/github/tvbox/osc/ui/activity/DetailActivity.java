@@ -1305,6 +1305,18 @@ public class DetailActivity extends BaseActivity {
             exitFullPreview();
             return;
         }
+        if (seriesSelect) {
+            if (seriesFlagFocus != null && !seriesFlagFocus.isFocused()) {
+                try {
+                    if (seriesFlagFocus.isShown()) {
+                        seriesFlagFocus.requestFocus();
+                        return;
+                    }
+                } catch (Throwable th) {
+                    th.printStackTrace();
+                }
+            }
+        }
         if(showPreview && playFragment!=null){
             try {
                 playFragment.setPlayTitle(false);
