@@ -92,6 +92,7 @@ import android.graphics.Paint;
  */
 
 public class DetailActivity extends BaseActivity {
+    private static final String STATE_FULL_WINDOWS = "detail_full_windows";
     private LinearLayout llLayout;
     private FragmentContainerView llPlayerFragmentContainer;
     private View llPlayerFragmentContainerBlock;
@@ -147,6 +148,14 @@ public class DetailActivity extends BaseActivity {
     boolean showPreview = Hawk.get(HawkConfig.SHOW_PREVIEW, true);; // true 开启 false 关闭
 
     private LinearSmoothScroller smoothScroller;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        if (savedInstanceState != null) {
+            fullWindows = savedInstanceState.getBoolean(STATE_FULL_WINDOWS, false);
+        }
+        super.onCreate(savedInstanceState);
+    }
 
     @Override
     protected int getLayoutResID() {
@@ -569,6 +578,9 @@ public class DetailActivity extends BaseActivity {
             tvPlay.requestFocus();
         }
         setLoadSir(llLayout);
+        if (fullWindows) {
+            setFullPreview(true);
+        }
     }
 
     //解决类似海贼王的超长动漫 焦点滚动失败的问题
@@ -1295,6 +1307,12 @@ public class DetailActivity extends BaseActivity {
         OkGo.getInstance().cancelTag("quick_search");
         releasePlayFragment();
         EventBus.getDefault().unregister(this);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putBoolean(STATE_FULL_WINDOWS, fullWindows);
+        super.onSaveInstanceState(outState);
     }
 
     @Override
