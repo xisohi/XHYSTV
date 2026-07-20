@@ -284,7 +284,7 @@ public class Updater {
                 long contentLength = response.body().contentLength();
                 inputStream = response.body().byteStream();
                 outputStream = new java.io.FileOutputStream(file);
-                byte[] buffer = new byte[8192];
+                byte[] buffer = new byte[32768];
                 long totalRead = 0;
                 int len;
                 int lastPercent = -1;
@@ -445,7 +445,7 @@ public class Updater {
 
             outStream = activity.getContentResolver().openOutputStream(uri);
             inStream = new FileInputStream(sourceFile);
-            byte[] buffer = new byte[8192];
+            byte[] buffer = new byte[32768];
             int len;
             while ((len = inStream.read(buffer)) != -1) {
                 outStream.write(buffer, 0, len);
