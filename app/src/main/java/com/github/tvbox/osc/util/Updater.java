@@ -286,6 +286,14 @@ public class Updater {
                 }
 
                 long contentLength = response.body().contentLength();
+                long freeSpace = cacheDir.getFreeSpace();
+                if (freeSpace < contentLength * 2) {
+                    mainHandler.post(() -> {
+                        dismissProgressDialog();
+                        showToast("存储空间不足，需要 " + (contentLength * 2 / (1024 * 1024)) + " MB");
+                    });
+                    return;
+                }
                 inputStream = response.body().byteStream();
                 outputStream = new java.io.FileOutputStream(file);
                 byte[] buffer = new byte[32768];
@@ -311,7 +319,7 @@ public class Updater {
                                 String timeStr = formatTime(remainingSec);
 
                                 final int finalPercent = percent;
-                                final String msg = String.format("⚡ %s  ⏱ %s  📦 %.1f/%.1f MB",
+                                final String msg = String.format("速度: %s  剩余: %s  进度： %.1f/%.1f MB",
                                         formatSpeed(speedKB), timeStr,
                                         totalRead / (1024.0 * 1024.0),
                                         contentLength / (1024.0 * 1024.0));
