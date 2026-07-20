@@ -64,6 +64,9 @@ public class Updater {
         this.mainHandler = new Handler(Looper.getMainLooper());
     }
 
+    private long lastSpeedUpdateTime = 0;
+    private long lastSpeedUpdateBytes = 0;
+
     public Updater force() {
         this.forceCheck = true;
         return this;
@@ -237,6 +240,7 @@ public class Updater {
             progressDialog.setTitle("正在下载");
             progressDialog.setMax(100);
             progressDialog.setCancelable(false);
+            progressDialog.setMessage("准备下载...");
             if (activity != null && !activity.isFinishing()) {
                 progressDialog.show();
             }
@@ -292,17 +296,36 @@ public class Updater {
                 while ((len = inputStream.read(buffer)) != -1) {
                     outputStream.write(buffer, 0, len);
                     totalRead += len;
+
                     if (contentLength > 0) {
                         int percent = (int) (totalRead * 100 / contentLength);
                         if (percent != lastPercent) {
                             lastPercent = percent;
-                            int finalPercent = percent;
-                            mainHandler.post(() -> {
-                                if (progressDialog != null && progressDialog.isShowing()
-                                        && activity != null && !activity.isFinishing()) {
-                                    progressDialog.setProgress(finalPercent);
-                                }
-                            });
+
+                            long now = System.currentTimeMillis();
+                            if (now - lastSpeedUpdateTime >= 1000) {
+                                // 计算速度 KB/s
+                                long speedKB = (totalRead - lastSpeedUpdateBytes) / 1024;
+                                // 计算剩余时间（秒）
+                                long remainingSec = (contentLength - totalRead) / (Math.max(speedKB, 1) * 1024);
+                                String timeStr = formatTime(remainingSec);
+
+                                final int finalPercent = percent;
+                                final String msg = String.format("⚡ %s  ⏱ %s  📦 %.1f/%.1f MB",
+                                        formatSpeed(speedKB), timeStr,
+                                        totalRead / (1024.0 * 1024.0),
+                                        contentLength / (1024.0 * 1024.0));
+
+                                mainHandler.post(() -> {
+                                    if (progressDialog != null && progressDialog.isShowing()) {
+                                        progressDialog.setProgress(finalPercent);
+                                        progressDialog.setMessage(msg);
+                                    }
+                                });
+
+                                lastSpeedUpdateTime = now;
+                                lastSpeedUpdateBytes = totalRead;
+                            }
                         }
                     }
                 }
@@ -334,6 +357,24 @@ public class Updater {
                 }
             }
         }).start();
+    }
+
+    private String formatSpeed(long speedKB) {
+        if (speedKB < 1024) {
+            return speedKB + " KB/s";
+        } else {
+            return String.format("%.1f MB/s", speedKB / 1024.0);
+        }
+    }
+    // 格式化时间
+    private String formatTime(long seconds) {
+        if (seconds < 60) {
+            return seconds + "秒";
+        } else if (seconds < 3600) {
+            return (seconds / 60) + "分" + (seconds % 60) + "秒";
+        } else {
+            return (seconds / 3600) + "时" + ((seconds % 3600) / 60) + "分";
+        }
     }
 
     // ========== 权限检查和路径选择 ==========
