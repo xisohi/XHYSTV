@@ -751,6 +751,10 @@ public class ApiConfig {
         SourceBean firstSite = null;
         for (JsonElement opt : infoJson.get("sites").getAsJsonArray()) {
             JsonObject obj = (JsonObject) opt;
+            if (!obj.has("key") || !obj.has("type") || !obj.has("api")) {
+                LOG.i("echo-skip incomplete site config: " + obj);
+                continue;
+            }
             SourceBean sb = new SourceBean();
             String siteKey = obj.get("key").getAsString().trim();
             sb.setKey(siteKey);
