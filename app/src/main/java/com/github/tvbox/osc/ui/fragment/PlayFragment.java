@@ -1403,57 +1403,67 @@ public class PlayFragment extends BaseLazyFragment {
         if (targetList == null || targetList.isEmpty()) {
             return 0;
         }
-        if (currentSeries != null && !TextUtils.isEmpty(currentSeries.name)) {
-            String currentName = normalizeEpisodeName(currentSeries.name);
-            for (int i = 0; i < targetList.size(); i++) {
-                VodInfo.VodSeries targetSeries = targetList.get(i);
-                if (targetSeries != null && currentName.equals(normalizeEpisodeName(targetSeries.name))) {
-                    return i;
-                }
+        if (targetList.size() == 1) {
+            return 0;
+        }
+        if (currentSeries == null || TextUtils.isEmpty(currentSeries.name)) {
+            return Math.max(0, Math.min(fallbackIndex, targetList.size() - 1));
+        }
+        int currentEpisode = extractEpisodeNumber(currentSeries.name);
+        int matchedIndex = -1;
+        int bestScore = 0;
+        for (int i = 0; i < targetList.size(); i++) {
+            VodInfo.VodSeries targetSeries = targetList.get(i);
+            int score = getEpisodeMatchScore(currentSeries.name, currentEpisode, targetSeries == null ? null : targetSeries.name);
+            if (score > bestScore) {
+                bestScore = score;
+                matchedIndex = i;
             }
-            int currentEpisode = extractEpisodeNumber(currentSeries.name);
-            if (currentEpisode >= 0) {
-                for (int i = 0; i < targetList.size(); i++) {
-                    VodInfo.VodSeries targetSeries = targetList.get(i);
-                    if (targetSeries != null && extractEpisodeNumber(targetSeries.name) == currentEpisode) {
-                        return i;
-                    }
-                }
-            }
+        }
+        if (matchedIndex >= 0) {
+            return matchedIndex;
         }
         return Math.max(0, Math.min(fallbackIndex, targetList.size() - 1));
     }
 
-    private String normalizeEpisodeName(String name) {
-        if (name == null) {
-            return "";
+    private int getEpisodeMatchScore(String currentName, int currentEpisode, String targetName) {
+        if (TextUtils.isEmpty(currentName) || TextUtils.isEmpty(targetName)) {
+            return 0;
         }
-        return name.toLowerCase(Locale.ROOT)
-                .replaceAll("\\s+", "")
-                .replaceAll("[\\[\\]【】()（）]", "")
-                .replace("第", "")
-                .replace("集", "")
-                .replace("话", "")
-                .replace("期", "");
+        if (targetName.equalsIgnoreCase(currentName)) {
+            return 100;
+        }
+        if (currentEpisode >= 0 && extractEpisodeNumber(targetName) == currentEpisode) {
+            return 80;
+        }
+        String currentLower = currentName.toLowerCase(Locale.ROOT);
+        String targetLower = targetName.toLowerCase(Locale.ROOT);
+        if (currentEpisode < 0 && currentName.length() >= 2 && targetLower.contains(currentLower)) {
+            return 70;
+        }
+        if (currentEpisode < 0 && targetName.length() >= 2 && currentLower.contains(targetLower)) {
+            return 60;
+        }
+        return 0;
     }
 
     private int extractEpisodeNumber(String name) {
-        if (name == null) {
+        if (TextUtils.isEmpty(name)) {
             return -1;
         }
-        Matcher episodeMatcher = Pattern.compile("(?:第)?(\\d+)(?:集|话|期|$)").matcher(name);
-        if (episodeMatcher.find()) {
-            try {
-                return Integer.parseInt(episodeMatcher.group(1));
-            } catch (NumberFormatException ignored) {
+        try {
+            String text = name.replaceAll("\\[.*?\\]|\\(.*?\\)", "");
+            text = text.replaceAll("\\b(19|20)\\d{2}\\b", "");
+            text = text.toLowerCase(Locale.ROOT).replaceAll("2160p|1080p|720p|480p|4k|h26[45]|x26[45]|mp4", "");
+            Matcher matcher = Pattern.compile("(?i)(?:ep|\\u7b2c|e|[\\-\\.\\s])\\s?(\\d{1,4})").matcher(text);
+            if (matcher.find()) {
+                return Integer.parseInt(matcher.group(1));
             }
-        }
-        Matcher matcher = Pattern.compile("\\d+").matcher(name);
-        if (matcher.find()) {
-            try {
-                return Integer.parseInt(matcher.group());
-            } catch (NumberFormatException ignored) {
+            String number = text.replaceAll("\\D+", "");
+            if (!TextUtils.isEmpty(number)) {
+                return Integer.parseInt(number);
             }
+        } catch (Exception ignored) {
         }
         return -1;
     }
