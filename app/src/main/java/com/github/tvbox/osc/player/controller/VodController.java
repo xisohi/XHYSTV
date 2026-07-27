@@ -986,7 +986,6 @@ public class VodController extends BaseController {
         mScreenDisplay.setVisibility(VISIBLE);
         mCastBtn.setVisibility(Build.VERSION.SDK_INT < 30 ? GONE : VISIBLE);
         if (mPlayerConfig != null) updatePlayerCfgView();
-        hideLiveAboutBtn();
         updateDanmuBtn();
         updateDanmuSearchUiBtn();
     }
@@ -1085,7 +1084,8 @@ public class VodController extends BaseController {
 
     public void updateDanmuBtn() {
         if (mDanmuSettingBtn == null) return;
-        mDanmuSettingBtn.setVisibility(hasDanmu ? VISIBLE : GONE);
+        mDanmuSettingBtn.setVisibility(VISIBLE);
+        updatePlayLabelVisibility();
     }
 
     public void updateDanmuSearchUiBtn() {
@@ -1097,20 +1097,21 @@ public class VodController extends BaseController {
 
     private void updatePlayLabelVisibility() {
         if (mPlayLabel == null || mPlayBtnGroup == null) return;
-        boolean hidePlayLabel = false;
-        String prevText = null;
+        boolean isDanmuMenuVisible = false;
+        boolean isScreenDisplayNext = false;
         for (int i = 0; i < mPlayBtnGroup.getChildCount(); i++) {
             View child = mPlayBtnGroup.getChildAt(i);
-            if (child == mPlayLabel || child.getVisibility() != VISIBLE || !(child instanceof TextView)) continue;
-            CharSequence text = ((TextView) child).getText();
-            String currentText = text == null ? "" : text.toString().trim();
-            if ("弹幕".equals(prevText) && ("搜弹幕".equals(currentText) || "弹幕搜索".equals(currentText))) {
-                hidePlayLabel = true;
+            if (child.getVisibility() != VISIBLE) continue;
+            if (child == mDanmuSettingBtn) {
+                isDanmuMenuVisible = true;
+                continue;
+            }
+            if (isDanmuMenuVisible) {
+                isScreenDisplayNext = child == mScreenDisplay;
                 break;
             }
-            prevText = currentText;
         }
-        mPlayLabel.setVisibility(hidePlayLabel ? GONE : VISIBLE);
+        mPlayLabel.setVisibility(isDanmuMenuVisible && !isScreenDisplayNext ? GONE : VISIBLE);
     }
 
     public interface VodControlListener {
