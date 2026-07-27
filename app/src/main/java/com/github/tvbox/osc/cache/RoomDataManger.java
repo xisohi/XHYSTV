@@ -50,7 +50,9 @@ public class RoomDataManger {
 
     public static void insertVodRecord(String sourceKey, VodInfo vodInfo) {
         VodRecordDao dao = AppDataManager.get().getVodRecordDao();
-        removeSameNameVodRecords(dao, sourceKey, vodInfo);
+        if (Hawk.get(HawkConfig.HISTORY_MERGE, false)) {
+            removeSameNameVodRecords(dao, sourceKey, vodInfo);
+        }
         VodRecord record = dao.getVodRecord(sourceKey, vodInfo.id);
         if (record == null) {
             record = new VodRecord();
@@ -91,7 +93,8 @@ public class RoomDataManger {
         Integer hisNum = HistoryHelper.getHisNum(index);
         List<VodRecord> recordList = dao.getAll(Integer.MAX_VALUE);
         List<VodInfo> vodInfoList = new ArrayList<>();
-        Set<String> historyNames = new HashSet<>();
+        boolean historyMerge = Hawk.get(HawkConfig.HISTORY_MERGE, false);
+        Set<String> historyNames = historyMerge ? new HashSet<String>() : null;
         if (recordList != null) {
             for (VodRecord record : recordList) {
                 VodInfo info = null;
@@ -109,10 +112,8 @@ public class RoomDataManger {
                 }
                 String name = getVodRecordName(info);
                 if (info != null) {
-                    if (TextUtils.isEmpty(name) || historyNames.add(name)) {
+                    if (!historyMerge || TextUtils.isEmpty(name) || historyNames.add(name)) {
                         vodInfoList.add(info);
-                    } else {
-                        dao.delete(record);
                     }
                 }
             }
