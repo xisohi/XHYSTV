@@ -73,9 +73,11 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Matcher;
@@ -93,6 +95,9 @@ import android.graphics.Paint;
 
 public class DetailActivity extends BaseActivity {
     private static final String STATE_FULL_WINDOWS = "detail_full_windows";
+    private static final String DETAIL_FALLBACK_SEARCH_TAG = "detail_fallback_search";
+    private static final int DETAIL_FALLBACK_MAX_SEARCH = 5;
+    private static final long DETAIL_FALLBACK_BATCH_TIMEOUT_MS = 5000L;
     private LinearLayout llLayout;
     private FragmentContainerView llPlayerFragmentContainer;
     private View llPlayerFragmentContainerBlock;
@@ -115,6 +120,7 @@ public class DetailActivity extends BaseActivity {
     private TextView tvDesc;
     private TextView tvSeriesSort;
     private TextView tvQuickSearch;
+    private TextView tvChangeSource;
     private TextView tvCollect;
     private TvRecyclerView mGridViewFlag;
     private TvRecyclerView mGridViewQuality;
@@ -195,6 +201,7 @@ public class DetailActivity extends BaseActivity {
         tvSeriesSort = findViewById(R.id.mSeriesSortTv);
         tvCollect = findViewById(R.id.tvCollect);
         tvQuickSearch = findViewById(R.id.tvQuickSearch);
+        tvChangeSource = findViewById(R.id.tvChangeSource);
         mEmptyPlayList = findViewById(R.id.mEmptyPlaylist);
         mGridView = findViewById(R.id.mGridView);
         mGridView.setHasFixedSize(false);
@@ -338,6 +345,13 @@ public class DetailActivity extends BaseActivity {
                         }
                     }
                 });
+            }
+        });
+        tvChangeSource.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                FastClickCheckUtil.check(v);
+                startDetailFallbackFromMenu();
             }
         });
         tvCollect.setOnClickListener(new View.OnClickListener() {
@@ -828,6 +842,7 @@ public class DetailActivity extends BaseActivity {
                 if (absXml != null && absXml.movie != null && absXml.movie.videoList != null && absXml.movie.videoList.size() > 0) {
                     showSuccess();
                     if(!TextUtils.isEmpty(absXml.msg) && !absXml.msg.equals("数据列表")){
+                        resetDetailFallback();
                         Toast.makeText(DetailActivity.this, absXml.msg, Toast.LENGTH_SHORT).show();
                         showEmpty();
                         return;
@@ -864,6 +879,7 @@ public class DetailActivity extends BaseActivity {
                     }
 
                     if (vodInfo.seriesMap != null && vodInfo.seriesMap.size() > 0) {
+                        resetDetailFallback();
                         mGridViewFlag.setVisibility(View.VISIBLE);
                         mGridView.setVisibility(View.VISIBLE);
                         tvPlay.setVisibility(View.VISIBLE);
@@ -918,12 +934,17 @@ public class DetailActivity extends BaseActivity {
                         tvSeriesGroup.setVisibility(View.GONE);
                         tvPlay.setVisibility(View.GONE);
                         mEmptyPlayList.setVisibility(View.VISIBLE);
+                        handleNoPlayableDetail();
                     }
                 } else {
-                    showEmpty();
-                    llPlayerFragmentContainer.setVisibility(View.GONE);
-                    llPlayerFragmentContainerBlock.setVisibility(View.GONE);
+                    handleEmptyDetail(absXml);
                 }
+            }
+        });
+        sourceViewModel.detailFallbackSearchResult.observe(this, new Observer<AbsXml>() {
+            @Override
+            public void onChanged(AbsXml absXml) {
+                onDetailFallbackSearchResult(absXml);
             }
         });
     }
@@ -948,6 +969,13 @@ public class DetailActivity extends BaseActivity {
     }
 
     private void loadDetail(String vid, String key) {
+        loadDetail(vid, key, false);
+    }
+
+    private void loadDetail(String vid, String key, boolean fallback) {
+        if (!fallback) {
+            resetDetailFallback();
+        }
         if (vid != null) {
             vodId = vid;
             sourceKey = key;
@@ -963,6 +991,293 @@ public class DetailActivity extends BaseActivity {
         }
     }
 
+    private void handleEmptyDetail(AbsXml data) {
+        if (data != null && !TextUtils.isEmpty(data.msg)) {
+            resetDetailFallback();
+            showDetailEmpty();
+            return;
+        }
+        handleNoPlayableDetail();
+    }
+
+    private void handleNoPlayableDetail() {
+        if (detailFallbackActive) {
+            detailFallbackLoadingCandidate = false;
+            loadNextDetailFallbackSource();
+            return;
+        }
+        startDetailFallback();
+    }
+
+    public boolean startDetailFallbackAfterLinesExhausted() {
+        return startDetailFallback(false);
+    }
+
+    private void startDetailFallbackFromMenu() {
+        if (!startDetailFallback(true)) {
+            Toast.makeText(this, "暂无可切换的片源", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private boolean startDetailFallback(boolean manual) {
+        SourceBean currentSource = ApiConfig.get().getSource(sourceKey);
+        if (isFinishing() || currentSource == null || !currentSource.isChangeable()) {
+            return false;
+        }
+        if (detailFallbackActive) {
+            return true;
+        }
+        if (mVideo != null && !TextUtils.isEmpty(mVideo.name)) {
+            vod_name = mVideo.name;
+        }
+        if (TextUtils.isEmpty(vod_name)) {
+            return false;
+        }
+        detailFallbackExcludedSourceKey = sourceKey;
+        detailFallbackTitle = vod_name.trim();
+        addDetailFallbackUsedSource(sourceKey);
+        if (loadDetailFallbackCache()) {
+            return true;
+        }
+        LOG.i("echo-detail fallback " + (manual ? "manual" : "after lines exhausted") + ": " + vod_name);
+        showLoading();
+        startDetailFallback();
+        return detailFallbackActive;
+    }
+
+    private void startDetailFallback() {
+        detailFallbackTitle = vod_name == null ? "" : vod_name.trim();
+        if (TextUtils.isEmpty(detailFallbackTitle)) {
+            showDetailEmpty();
+            return;
+        }
+
+        for (SourceBean bean : ApiConfig.get().getSourceBeanList()) {
+            if (bean.isSearchable() && bean.isChangeable() && !TextUtils.equals(bean.getKey(), detailFallbackExcludedSourceKey) && !isDetailFallbackSourceUsed(bean.getKey())) {
+                detailFallbackSourceOrder.add(bean.getKey());
+            }
+        }
+        if (detailFallbackSourceOrder.isEmpty()) {
+            showDetailEmpty();
+            return;
+        }
+
+        detailFallbackActive = true;
+        detailFallbackSearching = true;
+        detailFallbackLoadingCandidate = false;
+        detailFallbackBatchIndex = 0;
+        detailFallbackNextSourceIndex = 0;
+        detailFallbackToken = "detail_fallback_" + (++detailFallbackRequestIndex);
+        detailFallbackTriedKeys.add(getDetailFallbackKey(sourceKey, vodId));
+        LOG.i("echo-detail fallback search: " + detailFallbackTitle + ", sources=" + detailFallbackSourceOrder.size());
+        llLayout.removeCallbacks(detailFallbackTimeout);
+        scheduleDetailFallbackSearch();
+    }
+
+    private void onDetailFallbackSearchResult(AbsXml data) {
+        if (!detailFallbackActive || !detailFallbackSearching || data == null || !detailFallbackBatchToken.equals(data.searchToken)) {
+            return;
+        }
+        detailFallbackPendingSources.remove(data.sourceKey);
+        if (data.movie != null && data.movie.videoList != null) {
+            for (Movie.Video video : data.movie.videoList) {
+                if (video == null || TextUtils.isEmpty(video.id) || isDetailFallbackSourceUsed(video.sourceKey) || !detailFallbackTitle.equals(video.name == null ? "" : video.name.trim())) {
+                    continue;
+                }
+                String candidateKey = getDetailFallbackKey(video.sourceKey, video.id);
+                if (!detailFallbackTriedKeys.contains(candidateKey) && detailFallbackCandidateKeys.add(candidateKey)) {
+                    detailFallbackCandidates.add(video);
+                    cacheDetailFallbackCandidate(video);
+                }
+            }
+        }
+        if (!detailFallbackLoadingCandidate && !detailFallbackCandidates.isEmpty()) {
+            LOG.i("echo-detail fallback candidates: " + detailFallbackCandidates.size());
+            loadNextDetailFallbackSource();
+        }
+        if (!detailFallbackLoadingCandidate) {
+            scheduleDetailFallbackSearch();
+        }
+    }
+
+    private void scheduleDetailFallbackSearch() {
+        if (!detailFallbackActive || !detailFallbackSearching) {
+            return;
+        }
+        if (!detailFallbackPendingSources.isEmpty() || detailFallbackLoadingCandidate) {
+            return;
+        }
+        if (detailFallbackNextSourceIndex >= detailFallbackSourceOrder.size()) {
+            detailFallbackSearching = false;
+            llLayout.removeCallbacks(detailFallbackTimeout);
+            stopDetailFallbackSearchExecutor();
+            LOG.i("echo-detail fallback candidates: " + detailFallbackCandidates.size());
+            loadNextDetailFallbackSource();
+            return;
+        }
+
+        stopDetailFallbackSearchExecutor();
+        detailFallbackSearchExecutor = Executors.newFixedThreadPool(DETAIL_FALLBACK_MAX_SEARCH);
+        detailFallbackBatchToken = detailFallbackToken + "_batch_" + (++detailFallbackBatchIndex);
+        int batchEnd = Math.min(detailFallbackNextSourceIndex + DETAIL_FALLBACK_MAX_SEARCH, detailFallbackSourceOrder.size());
+        while (detailFallbackNextSourceIndex < batchEnd) {
+            final String searchKey = detailFallbackSourceOrder.get(detailFallbackNextSourceIndex++);
+            final String searchTitle = detailFallbackTitle;
+            final String searchToken = detailFallbackBatchToken;
+            detailFallbackPendingSources.add(searchKey);
+            detailFallbackSearchExecutor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    sourceViewModel.getDetailFallbackSearch(searchKey, searchTitle, searchToken);
+                }
+            });
+        }
+        llLayout.removeCallbacks(detailFallbackTimeout);
+        llLayout.postDelayed(detailFallbackTimeout, DETAIL_FALLBACK_BATCH_TIMEOUT_MS);
+    }
+
+    private void finishDetailFallbackSearchOnTimeout() {
+        if (!detailFallbackActive || !detailFallbackSearching || detailFallbackPendingSources.isEmpty()) {
+            return;
+        }
+        LOG.i("echo-detail fallback batch timeout: " + detailFallbackBatchToken);
+        detailFallbackPendingSources.clear();
+        detailFallbackBatchToken = "";
+        stopDetailFallbackSearchExecutor();
+        OkGo.getInstance().cancelTag(DETAIL_FALLBACK_SEARCH_TAG);
+        if (!detailFallbackLoadingCandidate) {
+            if (!detailFallbackCandidates.isEmpty()) {
+                LOG.i("echo-detail fallback candidates: " + detailFallbackCandidates.size());
+                loadNextDetailFallbackSource();
+            } else {
+                scheduleDetailFallbackSearch();
+            }
+        }
+    }
+
+    private void loadNextDetailFallbackSource() {
+        while (!detailFallbackCandidates.isEmpty()) {
+            Movie.Video video = detailFallbackCandidates.remove(0);
+            String candidateKey = getDetailFallbackKey(video.sourceKey, video.id);
+            if (isDetailFallbackSourceUsed(video.sourceKey) || !detailFallbackTriedKeys.add(candidateKey)) {
+                continue;
+            }
+            LOG.i("echo-detail fallback source: " + video.sourceKey + ", id=" + video.id);
+            detailFallbackLoadingCandidate = true;
+            addDetailFallbackUsedSource(video.sourceKey);
+            vod_name = video.name == null ? "" : video.name;
+            vod_picture = video.pic == null ? "" : video.pic;
+            loadDetail(video.id, video.sourceKey, true);
+            return;
+        }
+        if (detailFallbackSearching) {
+            if (detailFallbackPendingSources.isEmpty()) {
+                scheduleDetailFallbackSearch();
+            } else {
+                showLoading();
+            }
+            return;
+        }
+        resetDetailFallback();
+        showDetailEmpty();
+    }
+
+    private String getDetailFallbackKey(String key, String id) {
+        return (key == null ? "" : key) + "|" + (id == null ? "" : id);
+    }
+
+    private boolean loadDetailFallbackCache() {
+        List<Movie.Video> cachedCandidates = detailFallbackCache.get(detailFallbackTitle);
+        if (cachedCandidates == null || cachedCandidates.isEmpty()) {
+            return false;
+        }
+        for (Movie.Video video : cachedCandidates) {
+            if (video == null || TextUtils.equals(video.sourceKey, detailFallbackExcludedSourceKey) || isDetailFallbackSourceUsed(video.sourceKey)) {
+                continue;
+            }
+            String candidateKey = getDetailFallbackKey(video.sourceKey, video.id);
+            if (detailFallbackCandidateKeys.add(candidateKey)) {
+                detailFallbackCandidates.add(video);
+            }
+        }
+        if (detailFallbackCandidates.isEmpty()) {
+            return false;
+        }
+        detailFallbackActive = true;
+        detailFallbackLoadingCandidate = false;
+        detailFallbackTriedKeys.add(getDetailFallbackKey(sourceKey, vodId));
+        LOG.i("echo-detail fallback cache: " + detailFallbackTitle + ", candidates=" + detailFallbackCandidates.size());
+        showLoading();
+        loadNextDetailFallbackSource();
+        return true;
+    }
+
+    private void cacheDetailFallbackCandidate(Movie.Video video) {
+        List<Movie.Video> cachedCandidates = detailFallbackCache.get(detailFallbackTitle);
+        if (cachedCandidates == null) {
+            cachedCandidates = new ArrayList<>();
+            detailFallbackCache.put(detailFallbackTitle, cachedCandidates);
+        }
+        String candidateKey = getDetailFallbackKey(video.sourceKey, video.id);
+        for (Movie.Video cachedVideo : cachedCandidates) {
+            if (candidateKey.equals(getDetailFallbackKey(cachedVideo.sourceKey, cachedVideo.id))) {
+                return;
+            }
+        }
+        cachedCandidates.add(video);
+    }
+
+    private void addDetailFallbackUsedSource(String sourceKey) {
+        if (TextUtils.isEmpty(detailFallbackTitle) || TextUtils.isEmpty(sourceKey)) {
+            return;
+        }
+        Set<String> usedSources = detailFallbackUsedSourceKeys.get(detailFallbackTitle);
+        if (usedSources == null) {
+            usedSources = new HashSet<>();
+            detailFallbackUsedSourceKeys.put(detailFallbackTitle, usedSources);
+        }
+        usedSources.add(sourceKey);
+    }
+
+    private boolean isDetailFallbackSourceUsed(String sourceKey) {
+        Set<String> usedSources = detailFallbackUsedSourceKeys.get(detailFallbackTitle);
+        return usedSources != null && usedSources.contains(sourceKey);
+    }
+
+    private void showDetailEmpty() {
+        showEmpty();
+        llPlayerFragmentContainer.setVisibility(View.GONE);
+        llPlayerFragmentContainerBlock.setVisibility(View.GONE);
+    }
+
+    private void resetDetailFallback() {
+        detailFallbackActive = false;
+        detailFallbackSearching = false;
+        detailFallbackLoadingCandidate = false;
+        detailFallbackBatchIndex = 0;
+        detailFallbackNextSourceIndex = 0;
+        detailFallbackToken = "";
+        detailFallbackBatchToken = "";
+        detailFallbackTitle = "";
+        detailFallbackExcludedSourceKey = "";
+        detailFallbackSourceOrder.clear();
+        detailFallbackCandidates.clear();
+        detailFallbackPendingSources.clear();
+        detailFallbackCandidateKeys.clear();
+        detailFallbackTriedKeys.clear();
+        if (llLayout != null) {
+            llLayout.removeCallbacks(detailFallbackTimeout);
+        }
+        stopDetailFallbackSearchExecutor();
+        OkGo.getInstance().cancelTag(DETAIL_FALLBACK_SEARCH_TAG);
+    }
+
+    private void stopDetailFallbackSearchExecutor() {
+        if (detailFallbackSearchExecutor != null) {
+            detailFallbackSearchExecutor.shutdownNow();
+            detailFallbackSearchExecutor = null;
+        }
+    }
 
     private boolean isFirstLoad = true;
     @Subscribe(threadMode = ThreadMode.MAIN)
@@ -1023,6 +1338,30 @@ public class DetailActivity extends BaseActivity {
     private final List<Movie.Video> quickSearchData = new ArrayList<>();
     private final List<String> quickSearchWord = new ArrayList<>();
     private ExecutorService searchExecutorService = null;
+    private ExecutorService detailFallbackSearchExecutor;
+    private final List<String> detailFallbackSourceOrder = new ArrayList<>();
+    private final List<Movie.Video> detailFallbackCandidates = new ArrayList<>();
+    private final HashMap<String, List<Movie.Video>> detailFallbackCache = new HashMap<>();
+    private final HashMap<String, Set<String>> detailFallbackUsedSourceKeys = new HashMap<>();
+    private final Set<String> detailFallbackPendingSources = new HashSet<>();
+    private final Set<String> detailFallbackCandidateKeys = new HashSet<>();
+    private final Set<String> detailFallbackTriedKeys = new HashSet<>();
+    private boolean detailFallbackActive;
+    private boolean detailFallbackSearching;
+    private boolean detailFallbackLoadingCandidate;
+    private int detailFallbackRequestIndex;
+    private int detailFallbackBatchIndex;
+    private int detailFallbackNextSourceIndex;
+    private String detailFallbackToken = "";
+    private String detailFallbackBatchToken = "";
+    private String detailFallbackTitle = "";
+    private String detailFallbackExcludedSourceKey = "";
+    private final Runnable detailFallbackTimeout = new Runnable() {
+        @Override
+        public void run() {
+            finishDetailFallbackSearchOnTimeout();
+        }
+    };
 
     private void switchSearchWord(String word) {
         OkGo.getInstance().cancelTag("quick_search");
@@ -1293,6 +1632,7 @@ public class DetailActivity extends BaseActivity {
 
     @Override
     protected void onDestroy() {
+        resetDetailFallback();
         super.onDestroy();
         try {
             if (searchExecutorService != null) {

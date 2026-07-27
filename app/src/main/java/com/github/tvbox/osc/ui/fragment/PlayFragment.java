@@ -61,6 +61,7 @@ import com.github.tvbox.osc.player.controller.VodController;
 import com.github.tvbox.osc.player.danmu.DanmuLoadController;
 import com.github.tvbox.osc.server.ControlManager;
 import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
+import com.github.tvbox.osc.ui.activity.DetailActivity;
 import com.github.tvbox.osc.ui.dialog.CastDeviceDialog;
 import com.github.tvbox.osc.ui.dialog.DanmuSettingDialog;
 import com.github.tvbox.osc.ui.dialog.SearchSubtitleDialog;
@@ -1318,7 +1319,7 @@ public class PlayFragment extends BaseLazyFragment {
             LOG.i("echo-autoRetry all lines exhausted");
             triedLineFlags.clear();
             autoRetryCount = 0;
-            return false;
+            return requestDetailFallbackAfterLinesExhausted();
         }
         final String flagToSwitch = nextFlag;
         final String preProgressKey = progressKey;
@@ -1344,6 +1345,14 @@ public class PlayFragment extends BaseLazyFragment {
         inheritProgress = preProgress;
         play(false);
         return true;
+    }
+
+    private boolean requestDetailFallbackAfterLinesExhausted() {
+        Activity activity = getActivity();
+        if (!(activity instanceof DetailActivity)) {
+            return false;
+        }
+        return ((DetailActivity) activity).startDetailFallbackAfterLinesExhausted();
     }
 
     private List<String> getLineFlagsInDisplayOrder() {

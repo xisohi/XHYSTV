@@ -763,6 +763,7 @@ public class ApiConfig {
             sb.setApi(obj.get("api").getAsString().trim());
             sb.setSearchable(DefaultConfig.safeJsonInt(obj, "searchable", 1));
             sb.setQuickSearch(DefaultConfig.safeJsonInt(obj, "quickSearch", 1));
+            sb.setChangeable(DefaultConfig.safeJsonInt(obj, "changeable", 1));
             if(siteKey.startsWith("py_")){
                 sb.setFilterable(1);
             }else {
