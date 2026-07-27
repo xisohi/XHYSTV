@@ -860,7 +860,11 @@ public class DetailActivity extends BaseActivity {
                     sourceKey = mVideo.sourceKey;
 
                     tvName.setText(mVideo.name);
-                    setTextShow(tvSite, "来源：", ApiConfig.get().getSource(firstsourceKey).getName());
+                    SourceBean displaySource = ApiConfig.get().getSource(firstsourceKey);
+                    if (displaySource == null) {
+                        displaySource = ApiConfig.get().getSource(sourceKey);
+                    }
+                    setTextShow(tvSite, "来源：", displaySource == null ? "" : displaySource.getName());
                     setTextShow(tvYear, "年份：", mVideo.year == 0 ? "" : String.valueOf(mVideo.year));
                     setTextShow(tvArea, "地区：", mVideo.area);
                     setTextShow(tvLang, "语言：", mVideo.lang);
@@ -976,18 +980,20 @@ public class DetailActivity extends BaseActivity {
         if (!fallback) {
             resetDetailFallback();
         }
-        if (vid != null) {
-            vodId = vid;
-            sourceKey = key;
-            firstsourceKey = key;
-            showLoading();
-            sourceViewModel.getDetail(sourceKey, vodId);
-            boolean isVodCollect = RoomDataManger.isVodCollect(sourceKey, vodId);
-            if (isVodCollect) {
-                tvCollect.setText("取消收藏");
-            } else {
-                tvCollect.setText("加入收藏");
-            }
+        vodId = vid;
+        sourceKey = key;
+        firstsourceKey = key;
+        if (TextUtils.isEmpty(vid) || vid.startsWith("msearch:") || ApiConfig.get().getSource(sourceKey) == null) {
+            handleNoPlayableDetail();
+            return;
+        }
+        showLoading();
+        sourceViewModel.getDetail(sourceKey, vodId);
+        boolean isVodCollect = RoomDataManger.isVodCollect(sourceKey, vodId);
+        if (isVodCollect) {
+            tvCollect.setText("取消收藏");
+        } else {
+            tvCollect.setText("加入收藏");
         }
     }
 
