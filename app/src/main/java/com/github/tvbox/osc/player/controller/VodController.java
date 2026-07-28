@@ -76,11 +76,11 @@ import java.util.List;
 
 import java.util.Date;
 import java.util.Map;
+import java.util.Locale;
 
 import xyz.doikki.videoplayer.player.VideoView;
 
 import static xyz.doikki.videoplayer.util.PlayerUtils.stringForTime;
-import static xyz.doikki.videoplayer.util.PlayerUtils.seconds2Time;
 import static xyz.doikki.videoplayer.util.PlayerUtils.safeTimeMs;
 
 public class VodController extends BaseController {
@@ -1256,7 +1256,7 @@ public class VodController extends BaseController {
         }
         mCurrentTime.setText(stringForTime(position));
         mTotalTime.setText(stringForTime(duration));
-        seekTime.setText((seconds2Time(position)) + " | " + (seconds2Time(duration))); //右上角进度条时间显示
+        seekTime.setText(formatSeekTime(position) + " | " + formatSeekTime(duration)); //右上角进度条时间显示
         if (duration > 0) {
             mSeekBar.setEnabled(true);
             int pos = (int) (position * 1.0 / duration * mSeekBar.getMax());
@@ -1270,6 +1270,16 @@ public class VodController extends BaseController {
         } else {
             mSeekBar.setSecondaryProgress(percent * 10);
         }
+    }
+
+    private static String formatSeekTime(int timeMs) {
+        int totalSeconds = Math.max(0, timeMs) / 1000;
+        int seconds = totalSeconds % 60;
+        int minutes = (totalSeconds / 60) % 60;
+        int hours = totalSeconds / 3600;
+        return hours > 0
+                ? String.format(Locale.getDefault(), "%d:%02d:%02d", hours, minutes, seconds)
+                : String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds);
     }
 
     private boolean simSlideStart = false;
