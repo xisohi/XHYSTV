@@ -2726,8 +2726,7 @@ public class LivePlayActivity extends BaseActivity {
         if (tvLeftChannelListLayout != null) tvLeftChannelListLayout.setVisibility(View.INVISIBLE);
         if (tvRightSettingLayout != null) tvRightSettingLayout.setVisibility(View.INVISIBLE);
         if (liveChannelGroupAdapter != null) {
-            liveChannelGroupAdapter.setFocusedGroupIndex(-1);
-            liveChannelGroupAdapter.setSelectedGroupIndex(-1);
+            liveChannelGroupAdapter.clearGroupState();
         }
         if (liveChannelItemAdapter != null) {
             liveChannelItemAdapter.setFocusedChannelIndex(-1);
@@ -2760,10 +2759,7 @@ public class LivePlayActivity extends BaseActivity {
         if (list.size() == 1 && list.get(0).getGroupName().startsWith("http://127.0.0.1")) {
             loadProxyLives(list.get(0).getGroupName());
         } else {
-            liveChannelGroupList.clear();
-            liveChannelGroupList.addAll(list);
-            showSuccess();
-            initLiveState();
+            applyLiveChannelGroups(list);
         }
     }
 
@@ -2876,14 +2872,12 @@ public class LivePlayActivity extends BaseActivity {
                             });
                             return;
                         }
-                        liveChannelGroupList.clear();
-                        liveChannelGroupList.addAll(list);
+                        final ArrayList<LiveChannelGroup> loadedGroups = new ArrayList<>(list);
 
                         mHandler.post(new Runnable() {
                             @Override
                             public void run() {
-                                LivePlayActivity.this.showSuccess();
-                                initLiveState();
+                                applyLiveChannelGroups(loadedGroups);
                             }
                         });
                         try {
@@ -2919,14 +2913,12 @@ public class LivePlayActivity extends BaseActivity {
                         });
                         return;
                     }
-                    liveChannelGroupList.clear();
-                    liveChannelGroupList.addAll(list);
+                    final ArrayList<LiveChannelGroup> loadedGroups = new ArrayList<>(list);
 
                     mHandler.post(new Runnable() {
                         @Override
                         public void run() {
-                            LivePlayActivity.this.showSuccess();
-                            initLiveState();
+                            applyLiveChannelGroups(loadedGroups);
                         }
                     });
                 }
@@ -2952,6 +2944,13 @@ public class LivePlayActivity extends BaseActivity {
                 || lowerUrl.startsWith("rtsp://")
                 || lowerUrl.startsWith("rtmp://")
                 || lowerUrl.startsWith("rtp://");
+    }
+
+    private void applyLiveChannelGroups(List<LiveChannelGroup> groups) {
+        liveChannelGroupList.clear();
+        liveChannelGroupList.addAll(groups);
+        showSuccess();
+        initLiveState();
     }
 
     private void initLiveState() {
@@ -3001,7 +3000,8 @@ public class LivePlayActivity extends BaseActivity {
         tvLeftChannelListLayout.setVisibility(View.INVISIBLE);
         tvRightSettingLayout.setVisibility(View.INVISIBLE);
 
-        liveChannelGroupAdapter.setNewData(liveChannelGroupList);
+        liveChannelGroupAdapter.clearGroupState();
+        liveChannelGroupAdapter.setNewData(new ArrayList<>(liveChannelGroupList));
         currentLiveChannelIndex = -1;
         selectChannelGroup(lastChannelGroupIndex, false, lastLiveChannelIndex);
     }
@@ -3530,9 +3530,8 @@ public class LivePlayActivity extends BaseActivity {
         if (releasePlayer && mVideoView != null) mVideoView.release();
         showSuccess();
         if (liveChannelGroupAdapter != null) {
-            liveChannelGroupAdapter.setFocusedGroupIndex(-1);
-            liveChannelGroupAdapter.setSelectedGroupIndex(-1);
-            liveChannelGroupAdapter.setNewData(liveChannelGroupList);
+            liveChannelGroupAdapter.clearGroupState();
+            liveChannelGroupAdapter.setNewData(new ArrayList<LiveChannelGroup>());
         }
         if (liveChannelItemAdapter != null) {
             liveChannelItemAdapter.setFocusedChannelIndex(-1);
