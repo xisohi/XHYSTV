@@ -132,6 +132,11 @@ public class HomeActivity extends BaseActivity {
         return R.layout.activity_home;
     }
 
+    @Override
+    protected boolean shouldRefreshAutoSize() {
+        return true;
+    }
+
     boolean useCacheConfig = false;
 
     @Override
