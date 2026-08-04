@@ -21,6 +21,7 @@ import com.google.android.exoplayer2.text.CueGroup;
 import com.google.android.exoplayer2.text.TextOutput;
 import com.google.android.exoplayer2.trackselection.DefaultTrackSelector;
 import com.google.android.exoplayer2.trackselection.MappingTrackSelector;
+import com.google.android.exoplayer2.util.MimeTypes;
 
 import java.util.ArrayList;
 import java.lang.reflect.InvocationHandler;
@@ -122,6 +123,7 @@ public class ExoPlayer extends ExoMediaPlayer {
                 TrackGroup group = groups.get(groupIndex);
                 for (int trackIndex = 0; trackIndex < group.length; trackIndex++) {
                     Format fmt = group.getFormat(trackIndex);
+                    if (type == C.TRACK_TYPE_TEXT && isUndeclaredClosedCaptionTrack(fmt)) continue;
                     String language = getLanguage(fmt);
                     String detail = type == C.TRACK_TYPE_VIDEO ? getVideoName(fmt) : getName(fmt);
                     TrackInfoBean bean = new TrackInfoBean();
@@ -256,6 +258,12 @@ public class ExoPlayer extends ExoMediaPlayer {
         if (format == null || format.sampleMimeType == null) return false;
         String mimeType = format.sampleMimeType.toLowerCase();
         return mimeType.contains("pgs") || mimeType.contains("dvb") || mimeType.contains("vobsub");
+    }
+
+    private boolean isUndeclaredClosedCaptionTrack(Format format) {
+        if (format == null || format.accessibilityChannel != Format.NO_VALUE) return false;
+        return MimeTypes.APPLICATION_CEA608.equals(format.sampleMimeType)
+                || MimeTypes.APPLICATION_CEA708.equals(format.sampleMimeType);
     }
 
     private boolean isCurrentTrackSelected(Format format, int trackType) {
