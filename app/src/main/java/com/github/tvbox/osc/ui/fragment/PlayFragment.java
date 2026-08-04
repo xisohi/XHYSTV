@@ -513,7 +513,7 @@ public class PlayFragment extends BaseLazyFragment {
             }
 
             @Override
-            public void moveSubtitle(int offset) {
+            public void moveSubtitle(float offset) {
                 if (mediaPlayer instanceof ExoPlayer && exoInternalSubtitle) {
                     applyExoSubtitleSettings();
                 }
@@ -802,7 +802,7 @@ public class PlayFragment extends BaseLazyFragment {
     private void applyExoSubtitleSettings() {
         if (!exoInternalSubtitle || mController == null || mController.mExoSubtitleView == null) return;
         float scale = SubtitleHelper.getExoSubtitleScale() / 100f;
-        int position = SubtitleHelper.getExoSubtitlePosition();
+        float position = SubtitleHelper.getExoSubtitlePosition();
         mController.mExoSubtitleView.setFractionalTextSize(0.0533f * scale);
         mController.mExoSubtitleView.setBottomPaddingFraction(limit(0.08f + position / 100f, 0f, 0.9f));
 

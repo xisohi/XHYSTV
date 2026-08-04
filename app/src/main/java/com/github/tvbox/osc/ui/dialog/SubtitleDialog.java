@@ -182,9 +182,9 @@ public class SubtitleDialog extends BaseDialog {
             @Override
             public void onClick(View view) {
                 if (exoInternalSubtitle) {
-                    int position = Math.min(80, SubtitleHelper.getExoSubtitlePosition() + 5);
+                    float position = Math.min(80.0f, SubtitleHelper.getExoSubtitlePosition() + 0.5f);
                     SubtitleHelper.setExoSubtitlePosition(position);
-                    subtitlePositionText.setText(position + "%");
+                    subtitlePositionText.setText(position == 0.0f ? "0" : position + "%");
                     mSubtitleViewListener.moveSubtitle(position);
                     return;
                 }
@@ -199,9 +199,9 @@ public class SubtitleDialog extends BaseDialog {
             @Override
             public void onClick(View view) {
                 if (exoInternalSubtitle) {
-                    int position = Math.max(-80, SubtitleHelper.getExoSubtitlePosition() - 5);
+                    float position = Math.max(-80.0f, SubtitleHelper.getExoSubtitlePosition() - 0.5f);
                     SubtitleHelper.setExoSubtitlePosition(position);
-                    subtitlePositionText.setText(position + "%");
+                    subtitlePositionText.setText(position == 0.0f ? "0" : position + "%");
                     mSubtitleViewListener.moveSubtitle(position);
                     return;
                 }
@@ -220,7 +220,8 @@ public class SubtitleDialog extends BaseDialog {
             subtitleStyleOne.setText("字幕上移");
             subtitleStyleTwo.setText("字幕下移");
             subtitleStyleTwo.setTextColor(getContext().getResources().getColor(R.color.dialog_text_primary));
-            subtitlePositionText.setText(SubtitleHelper.getExoSubtitlePosition() + "%");
+            float position = SubtitleHelper.getExoSubtitlePosition();
+            subtitlePositionText.setText(position == 0.0f ? "0" : position + "%");
             subtitleTimeHint.setText("字幕延时对内置字幕有效");
         } else {
             subtitleSizeText.setText(Integer.toString(SubtitleHelper.getTextSize(getOwnerActivity())));
@@ -258,6 +259,6 @@ public class SubtitleDialog extends BaseDialog {
         void selectInternalSubtitle();
         void setTextStyle(int style);
         void setSubtitleScale(int scale);
-        void moveSubtitle(int offset);
+        void moveSubtitle(float offset);
     }
 }
