@@ -38,4 +38,20 @@ public class SubtitleHelper {
         Hawk.put(HawkConfig.SUBTITLE_TIME_DELAY, delay);
     }
 
+    public static int getExoSubtitleScale() {
+        return Hawk.get(HawkConfig.SUBTITLE_EXO_SCALE, 100);
+    }
+
+    public static void setExoSubtitleScale(int scale) {
+        Hawk.put(HawkConfig.SUBTITLE_EXO_SCALE, scale);
+    }
+
+    public static int getExoSubtitlePosition() {
+        return Hawk.get(HawkConfig.SUBTITLE_EXO_POSITION, 0);
+    }
+
+    public static void setExoSubtitlePosition(int position) {
+        Hawk.put(HawkConfig.SUBTITLE_EXO_POSITION, position);
+    }
+
 }

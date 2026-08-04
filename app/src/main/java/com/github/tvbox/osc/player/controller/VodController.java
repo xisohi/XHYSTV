@@ -38,6 +38,7 @@ import com.github.tvbox.osc.bean.SourceBean;
 import com.github.tvbox.osc.server.ControlManager;
 import com.github.tvbox.osc.server.RemoteServer;
 import com.github.tvbox.osc.subtitle.widget.SimpleSubtitleView;
+import com.google.android.exoplayer2.ui.SubtitleView;
 import com.github.tvbox.osc.ui.adapter.ParseAdapter;
 import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
@@ -232,8 +233,10 @@ public class VodController extends BaseController {
     TextView mPlayLoadNetSpeed;
     TextView mVideoSize;
     public SimpleSubtitleView mSubtitleView;
+    public SubtitleView mExoSubtitleView;
     TextView mZimuBtn;
     TextView mAudioTrackBtn;
+    TextView mVideoTrackBtn;
     TextView mDanmuSettingBtn;
     TextView mDanmuSearchUiBtn;
     public TextView mLandscapePortraitBtn;
@@ -342,8 +345,10 @@ public class VodController extends BaseController {
         mPlayLoadNetSpeed = findViewById(R.id.tv_play_load_net_speed);
         mVideoSize = findViewById(R.id.tv_videosize);
         mSubtitleView = findViewById(R.id.subtitle_view);
+        mExoSubtitleView = findViewById(R.id.exo_subtitle_view);
         mZimuBtn = findViewById(R.id.zimu_select);
         mAudioTrackBtn = findViewById(R.id.audio_track_select);
+        mVideoTrackBtn = findViewById(R.id.video_track_select);
         mDanmuSettingBtn = findViewById(R.id.danmu_setting);
         mDanmuSearchUiBtn = findViewById(R.id.danmu_search_ui);
         mLandscapePortraitBtn = findViewById(R.id.landscape_portrait);
@@ -840,6 +845,7 @@ public class VodController extends BaseController {
                 mSubtitleView.destroy();
                 mSubtitleView.clearSubtitleCache();
                 mSubtitleView.isInternal = false;
+                mExoSubtitleView.setVisibility(View.GONE);
                 hideBottom();
                 Toast.makeText(getContext(), "字幕已关闭", Toast.LENGTH_SHORT).show();
                 return true;
@@ -850,6 +856,14 @@ public class VodController extends BaseController {
             public void onClick(View view) {
                 FastClickCheckUtil.check(view);
                 listener.selectAudioTrack();
+                hideBottom();
+            }
+        });
+        mVideoTrackBtn.setOnClickListener(new OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                FastClickCheckUtil.check(view);
+                listener.selectVideoTrack();
                 hideBottom();
             }
         });
@@ -926,7 +940,7 @@ public class VodController extends BaseController {
             mPlayerTimeResetBtn.setVisibility(GONE);
         } else {
             mPlayerSpeedBtn.setVisibility(View.VISIBLE);
-            mPlayerTimeStartEndText.setVisibility(View.VISIBLE);
+            mPlayerTimeStartEndText.setVisibility(GONE);
             mPlayerTimeStartBtn.setVisibility(View.VISIBLE);
             mPlayerTimeSkipBtn.setVisibility(View.VISIBLE);
             mPlayerTimeResetBtn.setVisibility(View.VISIBLE);
@@ -969,6 +983,7 @@ public class VodController extends BaseController {
             mCastBtn.setVisibility(GONE);
             mZimuBtn.setVisibility(GONE);
             mAudioTrackBtn.setVisibility(GONE);
+            mVideoTrackBtn.setVisibility(GONE);
             mDanmuSettingBtn.setVisibility(GONE);
             mDanmuSearchUiBtn.setVisibility(GONE);
             mScreenDisplay.setVisibility(GONE);
@@ -978,7 +993,7 @@ public class VodController extends BaseController {
         mParseRoot.setVisibility(showParse ? VISIBLE : GONE);
         mPlayrefresh.setVisibility(VISIBLE);
         mPlayerScaleBtn.setVisibility(VISIBLE);
-        mPlayerTimeStartEndText.setVisibility(VISIBLE);
+        mPlayerTimeStartEndText.setVisibility(GONE);
         mPlayerTimeStartBtn.setVisibility(VISIBLE);
         mPlayerTimeSkipBtn.setVisibility(VISIBLE);
         mPlayerTimeResetBtn.setVisibility(VISIBLE);
@@ -1039,9 +1054,12 @@ public class VodController extends BaseController {
             mPlayerIJKBtn.setVisibility(playerType == 1 ? VISIBLE : GONE);
             mPlayerScaleBtn.setText(PlayerHelper.getScaleName(mPlayerConfig.getInt("sc")));
             mPlayerSpeedBtn.setText("x" + mPlayerConfig.getDouble("sp"));
-            mPlayerTimeStartBtn.setText(stringForTime(mPlayerConfig.getInt("st") * 1000));
-            mPlayerTimeSkipBtn.setText(stringForTime(mPlayerConfig.getInt("et") * 1000));
+            int start = mPlayerConfig.getInt("st");
+            int end = mPlayerConfig.getInt("et");
+            mPlayerTimeStartBtn.setText(start == 0 ? "片头" : stringForTime(start * 1000));
+            mPlayerTimeSkipBtn.setText(end == 0 ? "片尾" : stringForTime(end * 1000));
             mAudioTrackBtn.setVisibility((playerType == 1 || playerType == 2) ? VISIBLE : GONE);
+            mVideoTrackBtn.setVisibility((playerType == 1 || playerType == 2) ? VISIBLE : GONE);
         } catch (JSONException e) {
             e.printStackTrace();
         }
@@ -1132,6 +1150,8 @@ public class VodController extends BaseController {
         void selectSubtitle();
 
         void selectAudioTrack();
+
+        void selectVideoTrack();
 
         void showDanmuSetting();
 
