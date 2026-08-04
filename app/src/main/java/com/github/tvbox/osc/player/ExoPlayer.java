@@ -122,10 +122,6 @@ public class ExoPlayer extends ExoMediaPlayer {
                 TrackGroup group = groups.get(groupIndex);
                 for (int trackIndex = 0; trackIndex < group.length; trackIndex++) {
                     Format fmt = group.getFormat(trackIndex);
-                    if (type == C.TRACK_TYPE_AUDIO && isDtsAudio(fmt)) {
-                        LOG.i("echo-exo-skip-dts-audio:" + getName(fmt));
-                        continue;
-                    }
                     String language = getLanguage(fmt);
                     String detail = type == C.TRACK_TYPE_VIDEO ? getVideoName(fmt) : getName(fmt);
                     TrackInfoBean bean = new TrackInfoBean();
@@ -181,12 +177,6 @@ public class ExoPlayer extends ExoMediaPlayer {
                 LOG.i("echo-setTrack: Invalid track index - group:" + groupIndex + ", track:" + trackIndex);
                 return;
             }
-            if (mappedInfo.getRendererType(rendererIndex) == C.TRACK_TYPE_AUDIO
-                    && isDtsAudio(groups.get(groupIndex).getFormat(trackIndex))) {
-                LOG.i("echo-exo-block-dts-audio:" + getName(groups.get(groupIndex).getFormat(trackIndex)));
-                return;
-            }
-
             DefaultTrackSelector.SelectionOverride override =
                     new DefaultTrackSelector.SelectionOverride(groupIndex, trackIndex);
             DefaultTrackSelector.Parameters.Builder builder = trackSelector.buildUponParameters();
@@ -260,11 +250,6 @@ public class ExoPlayer extends ExoMediaPlayer {
         if (groupIndex < 0 || groupIndex >= groups.length) return false;
         TrackGroup group = groups.get(groupIndex);
         return trackIndex >= 0 && trackIndex < group.length;
-    }
-
-    private boolean isDtsAudio(Format format) {
-        return format != null && format.sampleMimeType != null
-                && format.sampleMimeType.startsWith("audio/vnd.dts");
     }
 
     private boolean isBitmapSubtitle(Format format) {
