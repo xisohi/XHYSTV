@@ -573,11 +573,29 @@ public class VodController extends BaseController {
                 hideBottom();
             }
         });
+        mNextBtn.setOnLongClickListener(new OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View view) {
+                FastClickCheckUtil.check(view);
+                listener.showEpisodeDialog();
+                hideBottom();
+                return true;
+            }
+        });
         mPreBtn.setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View view) {
                 listener.playPre();
                 hideBottom();
+            }
+        });
+        mPreBtn.setOnLongClickListener(new OnLongClickListener() {
+            @Override
+            public boolean onLongClick(View view) {
+                FastClickCheckUtil.check(view);
+                listener.showEpisodeDialog();
+                hideBottom();
+                return true;
             }
         });
         mPlayerScaleBtn.setOnClickListener(new OnClickListener() {
@@ -1233,6 +1251,8 @@ public class VodController extends BaseController {
 
         void playPre();
 
+        void showEpisodeDialog();
+
         void prepared();
 
         void changeParse(ParseBean pb);
@@ -1523,6 +1543,11 @@ public class VodController extends BaseController {
         }
         int keyCode = event.getKeyCode();
         int action = event.getAction();
+        if (action == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0 && keyCode == KeyEvent.KEYCODE_MENU) {
+            listener.showEpisodeDialog();
+            hideBottom();
+            return true;
+        }
         if (isBottomVisible()) {
             mHandler.removeMessages(1002);
             mHandler.removeMessages(1003);
@@ -1541,7 +1566,7 @@ public class VodController extends BaseController {
                     togglePlay();
                     return true;
                 }
-            } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode== KeyEvent.KEYCODE_MENU) {
+            } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
                 if (!isBottomVisible()) {
                     showBottom();
                     myHandle.postDelayed(myRunnable, myHandleSeconds);

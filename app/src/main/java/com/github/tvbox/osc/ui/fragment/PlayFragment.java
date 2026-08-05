@@ -64,6 +64,7 @@ import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
 import com.github.tvbox.osc.ui.activity.DetailActivity;
 import com.github.tvbox.osc.ui.dialog.CastDeviceDialog;
 import com.github.tvbox.osc.ui.dialog.DanmuSettingDialog;
+import com.github.tvbox.osc.ui.dialog.EpisodeDialog;
 import com.github.tvbox.osc.ui.dialog.SearchDanmuDialog;
 import com.github.tvbox.osc.ui.dialog.SearchSubtitleDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
@@ -337,6 +338,11 @@ public class PlayFragment extends BaseLazyFragment {
             @Override
             public void playPre() {
                 PlayFragment.this.playPrevious();
+            }
+
+            @Override
+            public void showEpisodeDialog() {
+                PlayFragment.this.showEpisodeDialog();
             }
 
             @Override
@@ -1426,6 +1432,23 @@ public class PlayFragment extends BaseLazyFragment {
         }
         mVodInfo.playIndex--;
         play(false);
+    }
+
+    private void showEpisodeDialog() {
+        if (!isAdded() || mVodInfo == null || mVodInfo.seriesMap == null || TextUtils.isEmpty(mVodInfo.playFlag)) return;
+        List<VodInfo.VodSeries> episodes = mVodInfo.seriesMap.get(mVodInfo.playFlag);
+        if (episodes == null || episodes.isEmpty()) return;
+        String title = TextUtils.isEmpty(mVodInfo.name) ? "选集" : mVodInfo.name + " 选集";
+        EpisodeDialog dialog = new EpisodeDialog(requireContext(), title, episodes, mVodInfo.playIndex, new EpisodeDialog.EpisodeSelectListener() {
+            @Override
+            public void selectEpisode(int position) {
+                if (position < 0 || position >= episodes.size() || position == mVodInfo.playIndex) return;
+                triedLineFlags.clear();
+                mVodInfo.playIndex = position;
+                play(false);
+            }
+        });
+        dialog.show();
     }
 
     private int autoRetryCount = 0;
