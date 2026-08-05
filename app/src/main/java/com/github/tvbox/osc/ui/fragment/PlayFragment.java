@@ -64,6 +64,7 @@ import com.github.tvbox.osc.ui.adapter.SelectDialogAdapter;
 import com.github.tvbox.osc.ui.activity.DetailActivity;
 import com.github.tvbox.osc.ui.dialog.CastDeviceDialog;
 import com.github.tvbox.osc.ui.dialog.DanmuSettingDialog;
+import com.github.tvbox.osc.ui.dialog.SearchDanmuDialog;
 import com.github.tvbox.osc.ui.dialog.SearchSubtitleDialog;
 import com.github.tvbox.osc.ui.dialog.SelectDialog;
 import com.github.tvbox.osc.ui.dialog.SubtitleDialog;
@@ -293,7 +294,24 @@ public class PlayFragment extends BaseLazyFragment {
         mController.setListener(new VodController.VodControlListener() {
             @Override
             public void showDanmuSetting() {
-                DanmuSettingDialog dialog = new DanmuSettingDialog(requireContext(), mDanmuView);
+                DanmuSettingDialog dialog = new DanmuSettingDialog(requireContext());
+                dialog.setDanmuSearchListener(new DanmuSettingDialog.DanmuSearchListener() {
+                    @Override
+                    public void openSearchDanmuDialog() {
+                        SearchDanmuDialog searchDanmuDialog = new SearchDanmuDialog(requireContext());
+                        searchDanmuDialog.setDanmuLoader(new SearchDanmuDialog.DanmuLoader() {
+                            @Override
+                            public void loadDanmu(String danmu) {
+                                if (!isAdded()) return;
+                                checkDanmu(danmu);
+                            }
+                        });
+                        VodInfo.VodSeries series = mVodInfo == null ? null : getCurrentSeries(mVodInfo.playFlag, mVodInfo.playIndex);
+                        searchDanmuDialog.setEpisode(series == null ? "" : series.name);
+                        searchDanmuDialog.setSearchWord(mVodInfo == null ? "" : mVodInfo.name);
+                        searchDanmuDialog.show();
+                    }
+                });
                 dialog.show();
             }
 
