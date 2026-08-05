@@ -43,6 +43,7 @@ public class DanmuSettingDialog extends BaseDialog {
             dismiss();
             danmuSearchListener.openSearchDanmuDialog();
         });
+        danmuSearch.post(danmuSearch::requestFocus);
     }
 
     private void initColor() {
@@ -174,10 +175,6 @@ public class DanmuSettingDialog extends BaseDialog {
         tvRecyclerView.setLayoutManager(new V7LinearLayoutManager(getContext(), 0, false));
         tvRecyclerView.setAdapter(adapter);
         tvRecyclerView.setSelectedPosition(select);
-        tvRecyclerView.post(() -> {
-            tvRecyclerView.smoothScrollToPosition(select);
-            tvRecyclerView.setSelectionWithSmooth(select);
-        });
     }
 
     public void setDanmuSearchListener(DanmuSearchListener danmuSearchListener) {
