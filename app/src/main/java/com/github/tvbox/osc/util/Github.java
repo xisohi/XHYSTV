@@ -61,7 +61,7 @@ public class Github {
      * 获取 JSON 配置地址
      */
     public static String getJson(String name) {
-        return "https://xhys.lcjly.cn/update/" + name + ".json";
+        return "https://xhys.xisohi.dpdns.org/update/" + name + ".json";
     }
 
     /**
