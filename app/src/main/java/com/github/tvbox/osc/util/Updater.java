@@ -294,7 +294,9 @@ public class Updater {
                     Log.e(TAG, "下载失败: " + code);
                     if (file.exists()) file.delete();
                     mainHandler.post(() -> {
-                        dismissProgressDialog();
+                        if (progressDialog != null && progressDialog.isShowing()) {
+                            progressDialog.setMessage("线路切换中，请稍候...");
+                        }
                         showToast("下载失败，切换代理重试...");
                         mainHandler.postDelayed(() -> doDownload(), 1500);
                     });
@@ -395,7 +397,9 @@ public class Updater {
                     if (file.exists()) file.delete();
                 }
                 mainHandler.post(() -> {
-                    dismissProgressDialog();
+                    if (progressDialog != null && progressDialog.isShowing()) {
+                        progressDialog.setMessage("网络异常，切换线路中...");
+                    }
                     showToast("下载异常，切换代理重试...");
                     mainHandler.postDelayed(() -> doDownload(), 1500);
                 });
