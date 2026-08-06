@@ -25,7 +25,7 @@ import androidx.core.content.FileProvider;
 import com.github.tvbox.osc.BuildConfig;
 import com.github.tvbox.osc.R;
 import com.lzy.okgo.OkGo;
-import java.io.RandomAccessFile;
+
 import org.json.JSONObject;
 
 import java.io.File;
@@ -33,6 +33,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 
 /**
@@ -41,8 +42,10 @@ import java.nio.channels.FileChannel;
  * 1. 下载前自动选择最快代理（利用 Github 类的测速功能）
  * 2. 启动时不测速，节省资源
  * 3. 24小时缓存测速结果
- * 4. 代理失败自动按速度优先级切换下一个代理
+ * 4. 代理失败自动按速度优先级切换下一个代理（支持断点续传）
  * 5. 兼容 Android 4.4 - Android 15
+ * 6. 支持取消下载
+ * 7. 安装后自动删除 APK
  */
 public class Updater {
     private static final String TAG = "Updater";
@@ -55,6 +58,10 @@ public class Updater {
     private boolean forceCheck = false;
     private boolean silentMode = false;
     private boolean isInstallTriggered = false;
+    private volatile boolean isCancelled = false;
+
+    private long lastSpeedUpdateTime = 0;
+    private long lastSpeedUpdateBytes = 0;
 
     public static Updater create() {
         return new Updater();
@@ -63,9 +70,6 @@ public class Updater {
     private Updater() {
         this.mainHandler = new Handler(Looper.getMainLooper());
     }
-
-    private long lastSpeedUpdateTime = 0;
-    private long lastSpeedUpdateBytes = 0;
 
     public Updater force() {
         this.forceCheck = true;
@@ -199,8 +203,12 @@ public class Updater {
     /**
      * 实际执行下载
      * 使用 retryCount 作为代理索引，自动按速度优先级切换代理
+     * 支持断点续传
      */
     private void doDownload() {
+        // 重置取消标志
+        isCancelled = false;
+
         String apkName = getApkName();
 
         // 检查重试次数
@@ -232,24 +240,11 @@ public class Updater {
 
         Log.i(TAG, "下载: " + url);
 
-        mainHandler.post(() -> {
-            if (dialog != null && dialog.isShowing()) dialog.dismiss();
-            dismissProgressDialog();
-            progressDialog = new ProgressDialog(activity);
-            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-            progressDialog.setTitle("正在下载");
-            progressDialog.setMax(100);
-            progressDialog.setCancelable(false);
-            progressDialog.setMessage("准备下载...");
-            if (activity != null && !activity.isFinishing()) {
-                progressDialog.show();
-            }
-        });
-
+        // 提前创建 File 对象，供取消监听器使用
         File cacheDir = getAvailableCacheDir();
         final File file = new File(cacheDir, "update.apk");
 
-        // ✅ 获取已下载大小（不删除文件）
+        // 获取已下载大小（不删除文件）
         long downloadedSize = file.exists() ? file.length() : 0;
         if (downloadedSize > 0) {
             Log.i(TAG, "发现已下载 " + downloadedSize + " 字节，继续下载");
@@ -258,8 +253,36 @@ public class Updater {
                 file.getParentFile().mkdirs();
             }
         }
+        final long initialDownloadedSize = downloadedSize;
 
-        final long initialDownloadedSize = downloadedSize; // ✅ final 副本
+        // 显示进度对话框
+        mainHandler.post(() -> {
+            if (dialog != null && dialog.isShowing()) dialog.dismiss();
+            dismissProgressDialog();
+
+            progressDialog = new ProgressDialog(activity);
+            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+            progressDialog.setTitle("正在下载");
+            progressDialog.setMax(100);
+            progressDialog.setCancelable(true);
+            progressDialog.setMessage("准备下载...");
+
+            // 取消监听
+            progressDialog.setOnCancelListener(dialogInterface -> {
+                isCancelled = true;
+                Thread.currentThread().interrupt();
+                if (file.exists()) {
+                    file.delete();
+                }
+                showToast("已取消下载");
+                retryCount = 0;
+                dismissProgressDialog();
+            });
+
+            if (activity != null && !activity.isFinishing()) {
+                progressDialog.show();
+            }
+        });
 
         new Thread(() -> {
             okhttp3.Response response = null;
@@ -329,7 +352,7 @@ public class Updater {
                     return;
                 }
 
-                final long finalTotalSize = totalSize; // ✅ final 副本
+                final long finalTotalSize = totalSize;
 
                 randomAccessFile = new RandomAccessFile(file, "rw");
                 long currentDownloaded = (initialDownloadedSize > 0 && isPartial) ? initialDownloadedSize : 0;
@@ -346,6 +369,11 @@ public class Updater {
                 int lastPercent = -1;
 
                 while ((len = inputStream.read(buffer)) != -1) {
+                    // 检查是否取消
+                    if (isCancelled) {
+                        Log.d(TAG, "下载已取消");
+                        break;
+                    }
                     randomAccessFile.write(buffer, 0, len);
                     totalRead += len;
 
@@ -360,7 +388,6 @@ public class Updater {
                                 long remainingSec = (finalTotalSize - totalRead) / (Math.max(speedKB, 1) * 1024);
                                 String timeStr = formatTime(remainingSec);
 
-                                // ✅ 创建 final 副本用于 Lambda
                                 final long currentTotalRead = totalRead;
                                 final int finalPercent = percent;
                                 final String msg = String.format("速度: %s  剩余: %s  进度： %.1f/%.1f MB",
@@ -382,6 +409,15 @@ public class Updater {
                     }
                 }
 
+                // 如果被取消，清理资源并退出
+                if (isCancelled) {
+                    if (file.exists()) {
+                        file.delete();
+                        Log.d(TAG, "已删除取消下载的文件");
+                    }
+                    return;
+                }
+
                 // 下载完成
                 retryCount = 0;
                 mainHandler.post(() -> {
@@ -390,6 +426,10 @@ public class Updater {
                 });
 
             } catch (Exception e) {
+                if (isCancelled) {
+                    Log.d(TAG, "用户取消下载");
+                    return;
+                }
                 Log.e(TAG, "下载异常: " + e.getMessage());
                 if (file.exists() && file.length() > 0) {
                     Log.w(TAG, "下载异常，保留已下载 " + file.length() + " 字节");
@@ -404,9 +444,18 @@ public class Updater {
                     mainHandler.postDelayed(() -> doDownload(), 1500);
                 });
             } finally {
-                try { if (randomAccessFile != null) randomAccessFile.close(); } catch (IOException ignored) {}
-                try { if (inputStream != null) inputStream.close(); } catch (IOException ignored) {}
-                try { if (response != null) response.close(); } catch (Exception ignored) {}
+                try {
+                    if (randomAccessFile != null) randomAccessFile.close();
+                } catch (IOException ignored) {
+                }
+                try {
+                    if (inputStream != null) inputStream.close();
+                } catch (IOException ignored) {
+                }
+                try {
+                    if (response != null) response.close();
+                } catch (Exception ignored) {
+                }
             }
         }).start();
     }
@@ -418,7 +467,7 @@ public class Updater {
             return String.format("%.1f MB/s", speedKB / 1024.0);
         }
     }
-    // 格式化时间
+
     private String formatTime(long seconds) {
         if (seconds < 60) {
             return seconds + "秒";
@@ -482,6 +531,13 @@ public class Updater {
             }
 
             activity.startActivity(intent);
+
+            // 安装后延迟删除 APK 文件
+            mainHandler.postDelayed(() -> {
+                if (file.exists() && file.delete()) {
+                    Log.d(TAG, "APK 已删除，释放空间");
+                }
+            }, 8000);
 
         } catch (Exception e) {
             Log.e(TAG, "安装失败: " + e.getMessage(), e);
