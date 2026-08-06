@@ -25,7 +25,7 @@ import androidx.core.content.FileProvider;
 import com.github.tvbox.osc.BuildConfig;
 import com.github.tvbox.osc.R;
 import com.lzy.okgo.OkGo;
-
+import java.io.RandomAccessFile;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -248,17 +248,23 @@ public class Updater {
 
         File cacheDir = getAvailableCacheDir();
         final File file = new File(cacheDir, "update.apk");
-        if (file.exists()) {
-            file.delete();
+
+        // ✅ 获取已下载大小（不删除文件）
+        long downloadedSize = file.exists() ? file.length() : 0;
+        if (downloadedSize > 0) {
+            Log.i(TAG, "发现已下载 " + downloadedSize + " 字节，继续下载");
+        } else {
+            if (!file.getParentFile().exists()) {
+                file.getParentFile().mkdirs();
+            }
         }
-        if (!file.getParentFile().exists()) {
-            file.getParentFile().mkdirs();
-        }
+
+        final long initialDownloadedSize = downloadedSize; // ✅ final 副本
 
         new Thread(() -> {
             okhttp3.Response response = null;
             java.io.InputStream inputStream = null;
-            java.io.FileOutputStream outputStream = null;
+            RandomAccessFile randomAccessFile = null;
             try {
                 okhttp3.OkHttpClient client = OkGoHelper.getDefaultClient();
                 if (client == null) {
@@ -269,14 +275,24 @@ public class Updater {
                     return;
                 }
 
-                okhttp3.Request request = new okhttp3.Request.Builder()
+                okhttp3.Request.Builder requestBuilder = new okhttp3.Request.Builder()
                         .url(url)
-                        .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-                        .build();
+                        .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
 
+                if (initialDownloadedSize > 0) {
+                    requestBuilder.addHeader("Range", "bytes=" + initialDownloadedSize + "-");
+                    Log.d(TAG, "请求从 " + initialDownloadedSize + " 字节继续");
+                }
+
+                okhttp3.Request request = requestBuilder.build();
                 response = client.newCall(request).execute();
-                if (!response.isSuccessful()) {
-                    Log.e(TAG, "下载失败: " + response.code());
+
+                int code = response.code();
+                boolean isPartial = (code == 206);
+
+                if (code != 200 && code != 206) {
+                    Log.e(TAG, "下载失败: " + code);
+                    if (file.exists()) file.delete();
                     mainHandler.post(() -> {
                         dismissProgressDialog();
                         showToast("下载失败，切换代理重试...");
@@ -286,43 +302,69 @@ public class Updater {
                 }
 
                 long contentLength = response.body().contentLength();
+                long totalSize = contentLength;
+                String contentRange = response.header("Content-Range");
+                if (contentRange != null && contentRange.contains("/")) {
+                    try {
+                        String totalStr = contentRange.substring(contentRange.lastIndexOf('/') + 1);
+                        totalSize = Long.parseLong(totalStr);
+                    } catch (Exception ignored) {
+                    }
+                }
+                if (totalSize <= 0 && contentLength > 0) {
+                    totalSize = contentLength;
+                }
+
+                // 存储空间检查
                 long freeSpace = cacheDir.getFreeSpace();
-                if (freeSpace < contentLength * 2) {
+                if (freeSpace < totalSize * 2) {
+                    final long needSize = totalSize * 2 / (1024 * 1024);
                     mainHandler.post(() -> {
                         dismissProgressDialog();
-                        showToast("存储空间不足，需要 " + (contentLength * 2 / (1024 * 1024)) + " MB");
+                        showToast("存储空间不足，需要 " + needSize + " MB");
                     });
+                    if (file.exists()) file.delete();
                     return;
                 }
+
+                final long finalTotalSize = totalSize; // ✅ final 副本
+
+                randomAccessFile = new RandomAccessFile(file, "rw");
+                long currentDownloaded = (initialDownloadedSize > 0 && isPartial) ? initialDownloadedSize : 0;
+                if (currentDownloaded > 0) {
+                    randomAccessFile.seek(currentDownloaded);
+                } else {
+                    randomAccessFile.setLength(0);
+                }
+
                 inputStream = response.body().byteStream();
-                outputStream = new java.io.FileOutputStream(file);
                 byte[] buffer = new byte[32768];
-                long totalRead = 0;
+                long totalRead = currentDownloaded;
                 int len;
                 int lastPercent = -1;
 
                 while ((len = inputStream.read(buffer)) != -1) {
-                    outputStream.write(buffer, 0, len);
+                    randomAccessFile.write(buffer, 0, len);
                     totalRead += len;
 
-                    if (contentLength > 0) {
-                        int percent = (int) (totalRead * 100 / contentLength);
+                    if (finalTotalSize > 0) {
+                        int percent = (int) (totalRead * 100 / finalTotalSize);
                         if (percent != lastPercent) {
                             lastPercent = percent;
 
                             long now = System.currentTimeMillis();
                             if (now - lastSpeedUpdateTime >= 1000) {
-                                // 计算速度 KB/s
                                 long speedKB = (totalRead - lastSpeedUpdateBytes) / 1024;
-                                // 计算剩余时间（秒）
-                                long remainingSec = (contentLength - totalRead) / (Math.max(speedKB, 1) * 1024);
+                                long remainingSec = (finalTotalSize - totalRead) / (Math.max(speedKB, 1) * 1024);
                                 String timeStr = formatTime(remainingSec);
 
+                                // ✅ 创建 final 副本用于 Lambda
+                                final long currentTotalRead = totalRead;
                                 final int finalPercent = percent;
                                 final String msg = String.format("速度: %s  剩余: %s  进度： %.1f/%.1f MB",
                                         formatSpeed(speedKB), timeStr,
-                                        totalRead / (1024.0 * 1024.0),
-                                        contentLength / (1024.0 * 1024.0));
+                                        currentTotalRead / (1024.0 * 1024.0),
+                                        finalTotalSize / (1024.0 * 1024.0));
 
                                 mainHandler.post(() -> {
                                     if (progressDialog != null && progressDialog.isShowing()) {
@@ -337,9 +379,8 @@ public class Updater {
                         }
                     }
                 }
-                outputStream.flush();
 
-                // 下载成功，重置重试计数
+                // 下载完成
                 retryCount = 0;
                 mainHandler.post(() -> {
                     dismissProgressDialog();
@@ -348,21 +389,20 @@ public class Updater {
 
             } catch (Exception e) {
                 Log.e(TAG, "下载异常: " + e.getMessage());
+                if (file.exists() && file.length() > 0) {
+                    Log.w(TAG, "下载异常，保留已下载 " + file.length() + " 字节");
+                } else {
+                    if (file.exists()) file.delete();
+                }
                 mainHandler.post(() -> {
                     dismissProgressDialog();
                     showToast("下载异常，切换代理重试...");
                     mainHandler.postDelayed(() -> doDownload(), 1500);
                 });
             } finally {
-                if (outputStream != null) {
-                    try { outputStream.close(); } catch (IOException e) { /* ignore */ }
-                }
-                if (inputStream != null) {
-                    try { inputStream.close(); } catch (IOException e) { /* ignore */ }
-                }
-                if (response != null) {
-                    response.close();
-                }
+                try { if (randomAccessFile != null) randomAccessFile.close(); } catch (IOException ignored) {}
+                try { if (inputStream != null) inputStream.close(); } catch (IOException ignored) {}
+                try { if (response != null) response.close(); } catch (Exception ignored) {}
             }
         }).start();
     }
