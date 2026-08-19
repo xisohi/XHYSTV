@@ -63,7 +63,6 @@ import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -771,49 +770,7 @@ public class SearchActivity extends BaseActivity {
 
     private boolean matchSearchResult(String name, String searchTitle) {
         if (TextUtils.isEmpty(name) || TextUtils.isEmpty(searchTitle)) return false;
-        searchTitle = searchTitle.trim();
-        String[] arr = searchTitle.split("\\s+");
-        int matchNum = 0;
-        for(String one : arr) {
-            if (name.contains(one)) matchNum++;
-        }
-        return matchNum == arr.length ? true : false;
-    }
-
-    private boolean isExactSearchResult(Movie.Video video) {
-        return video != null && !TextUtils.isEmpty(video.name) && !TextUtils.isEmpty(searchTitle)
-                && TextUtils.equals(video.name.trim(), searchTitle.trim());
-    }
-
-    private void sortSearchResults(List<Movie.Video> data) {
-        if (data == null || data.size() < 2 || TextUtils.isEmpty(searchTitle)) return;
-        Collections.sort(data, new Comparator<Movie.Video>() {
-            @Override
-            public int compare(Movie.Video left, Movie.Video right) {
-                boolean leftExact = isExactSearchResult(left);
-                boolean rightExact = isExactSearchResult(right);
-                if (leftExact == rightExact) return 0;
-                return leftExact ? -1 : 1;
-            }
-        });
-    }
-
-    private void addSearchResults(List<Movie.Video> data) {
-        if (data == null || data.isEmpty()) return;
-        int exactCount = 0;
-        for (Movie.Video video : searchAdapter.getData()) {
-            if (!isExactSearchResult(video)) break;
-            exactCount++;
-        }
-        List<Movie.Video> otherResults = new ArrayList<>();
-        for (Movie.Video video : data) {
-            if (isExactSearchResult(video)) {
-                searchAdapter.addData(exactCount++, video);
-            } else {
-                otherResults.add(video);
-            }
-        }
-        if (!otherResults.isEmpty()) searchAdapter.addData(otherResults);
+        return TextUtils.equals(name.trim(), searchTitle.trim());
     }
 
     private void searchData(AbsXml absXml) {
@@ -831,9 +788,8 @@ public class SearchActivity extends BaseActivity {
                 if (matchSearchResult(video.name, searchTitle)) data.add(video);
             }
             if (searchAdapter.getData().size() > 0) {
-                addSearchResults(data);
+                searchAdapter.addData(data);
             } else {
-                sortSearchResults(data);
                 showSuccess();
                 mGridView.setVisibility(View.VISIBLE);
                 searchAdapter.setNewData(data);

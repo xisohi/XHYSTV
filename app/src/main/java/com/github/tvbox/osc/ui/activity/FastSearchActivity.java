@@ -46,7 +46,6 @@ import org.greenrobot.eventbus.ThreadMode;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -616,37 +615,6 @@ public class FastSearchActivity extends BaseActivity {
                 && TextUtils.equals(video.name.trim(), searchTitle.trim());
     }
 
-    private void sortSearchResults(List<Movie.Video> data) {
-        if (data == null || data.size() < 2 || TextUtils.isEmpty(searchTitle)) return;
-        Collections.sort(data, new Comparator<Movie.Video>() {
-            @Override
-            public int compare(Movie.Video left, Movie.Video right) {
-                boolean leftExact = isExactSearchResult(left);
-                boolean rightExact = isExactSearchResult(right);
-                if (leftExact == rightExact) return 0;
-                return leftExact ? -1 : 1;
-            }
-        });
-    }
-
-    private void addSearchResults(List<Movie.Video> data) {
-        if (data == null || data.isEmpty()) return;
-        int exactCount = 0;
-        for (Movie.Video video : searchAdapter.getData()) {
-            if (!isExactSearchResult(video)) break;
-            exactCount++;
-        }
-        List<Movie.Video> otherResults = new ArrayList<>();
-        for (Movie.Video video : data) {
-            if (isExactSearchResult(video)) {
-                searchAdapter.addData(exactCount++, video);
-            } else {
-                otherResults.add(video);
-            }
-        }
-        if (!otherResults.isEmpty()) searchAdapter.addData(otherResults);
-    }
-
     private void searchData(AbsXml absXml) {
         if (!isCurrentSearchResult(absXml)) {
             return;
@@ -662,23 +630,20 @@ public class FastSearchActivity extends BaseActivity {
             List<Movie.Video> data = new ArrayList<>();
             for (Movie.Video video : absXml.movie.videoList) {
                 if (!matchSearchResult(video.name, searchTitle)) continue;
-                data.add(video);
                 if (!resultVods.containsKey(video.sourceKey)) {
                     resultVods.put(video.sourceKey, new ArrayList<Movie.Video>());
                 }
                 resultVods.get(video.sourceKey).add(video);
+                if (isExactSearchResult(video)) {
+                    data.add(video);
+                }
                 if (!TextUtils.equals(video.sourceKey, lastSourceKey)) {
                     lastSourceKey = this.addWordAdapterIfNeed(video.sourceKey);
                 }
             }
 
-            sortSearchResults(data);
-            for (ArrayList<Movie.Video> sourceResults : resultVods.values()) {
-                sortSearchResults(sourceResults);
-            }
-
             if (searchAdapter.getData().size() > 0) {
-                addSearchResults(data);
+                searchAdapter.addData(data);
             } else {
                 showSuccess();
                 if (!isFilterMode)
