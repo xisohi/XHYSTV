@@ -138,6 +138,7 @@ public class DetailActivity extends BaseActivity {
     public String vodId;
     public String sourceKey;
     public String firstsourceKey;
+    private boolean fromCollect;
     boolean seriesSelect = false;
     private View seriesFlagFocus = null;
     private boolean isReverse;
@@ -976,6 +977,7 @@ public class DetailActivity extends BaseActivity {
             Bundle bundle = intent.getExtras();
             vod_name=bundle.getString("title", "");
             vod_picture=bundle.getString("picture", "");
+            fromCollect = bundle.getBoolean("collect", false);
             loadDetail(bundle.getString("id", null), bundle.getString("sourceKey", ""));
         }
     }
@@ -1006,9 +1008,13 @@ public class DetailActivity extends BaseActivity {
     }
 
     private void handleEmptyDetail(AbsXml data) {
-        if (data != null && !TextUtils.isEmpty(data.msg)) {
+        boolean shouldFinish = data != null && !TextUtils.isEmpty(data.msg);
+        if (shouldFinish || fromCollect) {
             resetDetailFallback();
-            showDetailEmpty();
+            if (shouldFinish) {
+                Toast.makeText(this, data.msg, Toast.LENGTH_SHORT).show();
+            }
+            finish();
             return;
         }
         handleNoPlayableDetail();
