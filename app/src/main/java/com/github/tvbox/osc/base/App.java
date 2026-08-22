@@ -77,6 +77,7 @@ public class App extends MultiDexApplication {
         // Hawk
         Hawk.init(this).build();
         Hawk.put(HawkConfig.DEBUG_OPEN, false);
+        Hawk.put(HawkConfig.PLAYER_IS_LIVE, false);
         //播放器：0 系统 1 ijk 2 exo 10 MXPlayer
         if (!Hawk.contains(HawkConfig.PLAY_TYPE)) {
             Hawk.put(HawkConfig.PLAY_TYPE, 2);
