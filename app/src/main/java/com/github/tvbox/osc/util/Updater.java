@@ -106,10 +106,10 @@ public class Updater {
     }
 
     /**
-     * 用户通知（仅在手动检查且非静默模式下显示）
+     * 用户通知
      */
     private void notifyUser(String msg) {
-        if (forceCheck && !silentMode) {
+        if (!silentMode) {
             showToast(msg);
         }
     }
