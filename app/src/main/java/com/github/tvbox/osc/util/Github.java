@@ -13,6 +13,12 @@ public class Github {
     private static final long SPEED_TEST_INTERVAL = 24 * 60 * 60 * 1000L;
 
     /**
+     * 对外公开：执行测速（内部自动判断24h缓存）
+     */
+    public static void runSpeedTestIfNeed() {
+        speedTestProxiesSync();
+    }
+    /**
      * 代理加速源域名列表（不带协议）
      */
     private static final String[] PROXY_HOSTS = {
@@ -253,5 +259,11 @@ public class Github {
         }
         status.append("=====================================");
         return status.toString();
+    }
+    public static long getLastSpeedTestTime() {
+        return lastSpeedTestTime;
+    }
+    public static long getSpeedTestInterval() {
+        return SPEED_TEST_INTERVAL;
     }
 }

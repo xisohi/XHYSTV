@@ -1021,7 +1021,7 @@ public class HomeActivity extends BaseActivity {
         if (!today.equals(lastCheck)) {
             Hawk.put(HawkConfig.UPDATE_CHECK_DATE, today);
             // 延迟 5 秒后执行权限检查和更新
-            mHandler.postDelayed(this::checkPermissionsAndUpdate, 5000);
+            mHandler.postDelayed(this::checkPermissionsAndUpdate, 8000);
         }
     }
 
