@@ -25,7 +25,7 @@ public class Github {
             //兼容 Android 4.4
             "github.catvod.com/",
             "ghproxy.net/",
-            "gh-proxy.org/",
+            "gh-proxy.com/",
             //Android 5.0+
             "ghfast.top/",
             "gh.acmsz.top/",
