@@ -234,6 +234,7 @@ public class VodController extends BaseController {
     TextView mPlayLoadNetSpeed;
     TextView mVideoSize;
     public SimpleSubtitleView mSubtitleView;
+    public SimpleSubtitleView mLyricView;
     public SubtitleView mExoSubtitleView;
     TextView mZimuBtn;
     TextView mAudioTrackBtn;
@@ -346,6 +347,7 @@ public class VodController extends BaseController {
         mPlayLoadNetSpeed = findViewById(R.id.tv_play_load_net_speed);
         mVideoSize = findViewById(R.id.tv_videosize);
         mSubtitleView = findViewById(R.id.subtitle_view);
+        mLyricView = findViewById(R.id.lyric_view);
         mExoSubtitleView = findViewById(R.id.exo_subtitle_view);
         mZimuBtn = findViewById(R.id.zimu_select);
         mAudioTrackBtn = findViewById(R.id.audio_track_select);
@@ -949,6 +951,9 @@ public class VodController extends BaseController {
                 mSubtitleView.destroy();
                 mSubtitleView.clearSubtitleCache();
                 mSubtitleView.isInternal = false;
+                mLyricView.setVisibility(View.GONE);
+                mLyricView.destroy();
+                mLyricView.clearSubtitleCache();
                 mExoSubtitleView.setVisibility(View.GONE);
                 hideBottom();
                 Toast.makeText(getContext(), "字幕已关闭", Toast.LENGTH_SHORT).show();

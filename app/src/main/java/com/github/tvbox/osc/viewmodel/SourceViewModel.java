@@ -704,6 +704,7 @@ public class SourceViewModel extends ViewModel {
                             List<String> ids = new ArrayList<>();
                             ids.add(id);
                             try {
+//                                LOG.i("echo--getDetail--id: " + id);
                                 return sp.detailContent(ids);
                             } catch (Exception e) {
                                 LOG.i("echo--getDetail--error: " + e.getMessage());
