@@ -26,6 +26,7 @@ public class Github {
             "github.catvod.com/",
             "ghproxy.net/",
             "gh-proxy.com/",
+            "51.195.241.253:8080/",
             //Android 5.0+
             "ghfast.top/",
             "gh.acmsz.top/",
