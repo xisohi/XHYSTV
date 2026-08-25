@@ -35,7 +35,7 @@ import java.nio.channels.FileChannel;
 /**
  * TVBox 应用更新管理器【最终完整版】
  * 修复清单：
- * 1. 修复三处 U+2011 特殊连字符bug(User‑Agent / Content‑Range / package‑archive)
+ * 1. 修复三处 U+2011 特殊连字符bug(User-Agent / Content‑Range / package‑archive)
  * 2. Activity销毁判断 isFinishing + isDestroyed
  * 3. 禁止回退getCacheDir私有缓存，优先externalCache，失败落到Download公共目录
  * 4. 修复取消下载错误interrupt，使用isCancelled标记
@@ -197,10 +197,54 @@ public class Updater {
             });
             return;
         }
+
         Log.d(TAG, "开始第 " + (retryCount + 1) + "/" + proxyCount + " 次下载尝试");
-        String githubUrl = "https://github.com/xisohi/XHYSosc/releases/download/XHYSTV/" + apkName + ".apk";
+        String githubUrl = Github.RELEASE_BASE_URL + apkName + ".apk";
         String url = Github.getProxyUrlByIndex(githubUrl, retryCount);
+
+        File cacheDir = getAvailableCacheDir();
+        final File file = new File(cacheDir, "update.apk");
+        long downloadedSize = 0;
+
+        // ====================== 方案A 文件逻辑 只保留这一份！======================
+        if (!silentMode) {
+            // 手动更新：只有第一轮retryCount==0删除历史残留apk，取消跨会话断点续传
+            if (retryCount == 0) {
+                if (file.exists()) {
+                    Log.i(TAG, "手动更新：首次尝试，删除历史残留apk，从头开始下载");
+                    file.delete();
+                }
+            } else {
+                // 同一次下载会话切换代理：保留文件，复用已下载字节做代理间断点续传
+                if (file.exists()) {
+                    downloadedSize = file.length();
+                    Log.i(TAG, "手动更新，切换代理，复用已下载 " + downloadedSize + " 字节继续下载");
+                }
+            }
+        } else {
+            // 冷启动静默更新逻辑保持不变
+            if (retryCount == 0) {
+                if (file.exists()) {
+                    Log.w(TAG, "静默自动更新：首次尝试，删除历史残留旧apk");
+                    file.delete();
+                }
+            } else {
+                if (file.exists()) {
+                    downloadedSize = file.length();
+                    Log.i(TAG, "静默更新，切换代理，复用已下载 " + downloadedSize + " 字节继续下载");
+                }
+            }
+        }
+        // ======================================================================
+
+        if (!file.getParentFile().exists()) {
+            file.getParentFile().mkdirs();
+        }
+        final long initialDownloadedSize = downloadedSize;
+
+        // ✅文件处理完成之后，再做retryCount自增
         retryCount++;
+
         if (url == null) {
             Log.e(TAG, "无可用代理");
             mainHandler.post(() -> {
@@ -211,27 +255,8 @@ public class Updater {
         }
         Log.i(TAG, "下载: " + url);
 
-        File cacheDir = getAvailableCacheDir();
-        final File file = new File(cacheDir, "update.apk");
-        long downloadedSize = 0;
-        // 静默自动更新(冷启动弹窗):删除旧残留apk，禁用断点续传；手动force更新保留断点续传
-        if (!silentMode && file.exists()) {
-            downloadedSize = file.length();
-            Log.i(TAG, "手动更新，发现已下载 " + downloadedSize + " 字节，继续下载");
-        } else {
-            if (file.exists()) {
-                Log.w(TAG, "静默自动更新，删除本地残留旧apk，禁用断点续传");
-                file.delete();
-            }
-        }
-
-        if (!file.getParentFile().exists()) {
-            file.getParentFile().mkdirs();
-        }
-        final long initialDownloadedSize = downloadedSize;
-
+        // ---------- ProgressDialog弹窗逻辑 ----------
         mainHandler.post(() -> {
-            // 只首次下载创建ProgressDialog；代理重试不复建弹窗，实现无感切换
             if (retryCount == 1) {
                 if (dialog != null && dialog.isShowing()) dialog.dismiss();
                 progressDialog = new ProgressDialog(activity);
@@ -253,180 +278,14 @@ public class Updater {
                     progressDialog.show();
                 }
             } else {
-                // 代理重试，仅修改提示文字，对话框保持不销毁
                 if (progressDialog != null && progressDialog.isShowing()) {
                     progressDialog.setMessage("切换代理中…");
                 }
             }
         });
 
-        new Thread(() -> {
-            okhttp3.Response response = null;
-            java.io.InputStream inputStream = null;
-            RandomAccessFile randomAccessFile = null;
-            try {
-                okhttp3.OkHttpClient client = OkGoHelper.getDefaultClient();
-                if (client == null) {
-                    // OkGo未初始化，清理旧残缺apk
-                    if (file.exists()) file.delete();
-                    mainHandler.post(() -> {
-                        dismissProgressDialog();
-                        if (isActivityAlive()) showToast("网络组件尚未初始化完成，请稍后重试更新");
-                    });
-                    return;
-                }
-
-                okhttp3.Request.Builder requestBuilder = new okhttp3.Request.Builder()
-                        .url(url)
-                        .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-                if (initialDownloadedSize > 0) {
-                    requestBuilder.addHeader("Range", "bytes=" + initialDownloadedSize + "-");
-                    Log.d(TAG, "请求从 " + initialDownloadedSize + " 字节继续");
-                }
-                okhttp3.Request request = requestBuilder.build();
-                response = client.newCall(request).execute();
-                int code = response.code();
-                boolean isPartial = (code == 206);
-                if (code != 200 && code != 206) {
-                    Log.e(TAG, "下载失败http code: " + code);
-                    mainHandler.post(() -> {
-                        if (progressDialog != null && progressDialog.isShowing()) {
-                            progressDialog.setMessage("切换代理中…");
-                        }
-                    });
-                    // 无感切换：不删除文件、不弹Toast，延时自动下一个代理
-                    mainHandler.postDelayed(() -> doDownload(), 800);
-                    return;
-                }
-
-                long contentLength = response.body().contentLength();
-                long totalSize = contentLength;
-                // 修复 Content‑Range 特殊连字符
-                String contentRange = response.header("Content-Range");
-                if (contentRange != null && contentRange.contains("/")) {
-                    try {
-                        String totalStr = contentRange.substring(contentRange.lastIndexOf('/') + 1);
-                        totalSize = Long.parseLong(totalStr);
-                    } catch (Exception ignored) {
-                    }
-                }
-                if (totalSize <= 0 && contentLength > 0) {
-                    totalSize = contentLength;
-                }
-
-                long freeSpace = cacheDir.getFreeSpace();
-                if (freeSpace < totalSize * 2) {
-                    final long needSize = totalSize * 2 / (1024 * 1024);
-                    mainHandler.post(() -> {
-                        dismissProgressDialog();
-                        if (isActivityAlive()) showToast("存储空间不足，需要 " + needSize + " MB");
-                    });
-                    if (file.exists()) file.delete();
-                    return;
-                }
-
-                final long finalTotalSize = totalSize;
-                randomAccessFile = new RandomAccessFile(file, "rw");
-                long currentDownloaded = (initialDownloadedSize > 0 && isPartial) ? initialDownloadedSize : 0;
-                if (currentDownloaded > 0) {
-                    randomAccessFile.seek(currentDownloaded);
-                } else {
-                    randomAccessFile.setLength(0);
-                }
-                inputStream = response.body().byteStream();
-                byte[] buffer = new byte[32768];
-                long totalRead = currentDownloaded;
-                int len;
-                int lastPercent = -1;
-                while ((len = inputStream.read(buffer)) != -1) {
-                    if (isCancelled) {
-                        Log.d(TAG, "下载已取消");
-                        break;
-                    }
-                    randomAccessFile.write(buffer, 0, len);
-                    totalRead += len;
-                    if (finalTotalSize > 0) {
-                        int percent = (int) (totalRead * 100 / finalTotalSize);
-                        if (percent != lastPercent) {
-                            lastPercent = percent;
-                            long now = System.currentTimeMillis();
-                            if (now - lastSpeedUpdateTime >= 1000) {
-                                long speedKB = (totalRead - lastSpeedUpdateBytes) / 1024;
-                                long remainingSec = (finalTotalSize - totalRead) / (Math.max(speedKB, 1) * 1024);
-                                String timeStr = formatTime(remainingSec);
-                                final long currentTotalRead = totalRead;
-                                final int finalPercent = percent;
-                                final String msg = String.format("速度: %s  剩余: %s  进度： %.1f/%.1f MB",
-                                        formatSpeed(speedKB), timeStr,
-                                        currentTotalRead / (1024.0 * 1024.0),
-                                        finalTotalSize / (1024.0 * 1024.0));
-                                mainHandler.post(() -> {
-                                    if (progressDialog != null && progressDialog.isShowing()) {
-                                        progressDialog.setProgress(finalPercent);
-                                        progressDialog.setMessage(msg);
-                                    }
-                                });
-                                lastSpeedUpdateTime = now;
-                                lastSpeedUpdateBytes = totalRead;
-                            }
-                        }
-                    }
-                }
-
-                if (isCancelled) {
-                    if (file.exists()) {
-                        file.delete();
-                        Log.d(TAG, "已删除取消下载的文件");
-                    }
-                    return;
-                }
-
-                // 下载完成基础校验，apk最小1MB
-                if (!file.exists() || file.length() < 1024 * 1024) {
-                    Log.e(TAG, "下载得到APK文件异常，大小=" + (file.exists() ? file.length() : 0));
-                    if (file.exists()) file.delete();
-                    mainHandler.post(() -> {
-                        dismissProgressDialog();
-                        if (isActivityAlive()) showToast("更新包文件异常，请重试");
-                    });
-                    return;
-                }
-
-                retryCount = 0;
-                mainHandler.post(() -> {
-                    dismissProgressDialog();
-                    installApk(file);
-                });
-
-            } catch (Exception e) {
-                if (isCancelled) {
-                    Log.d(TAG, "用户取消下载");
-                    return;
-                }
-                Log.e(TAG, "下载异常: " + e.getMessage());
-                mainHandler.post(() -> {
-                    if (progressDialog != null && progressDialog.isShowing()) {
-                        progressDialog.setMessage("切换代理中…");
-                    }
-                });
-                // 无感重试：不删除已下载内容，不弹toast，延时切下一个代理
-                mainHandler.postDelayed(() -> doDownload(), 800);
-                return;
-            } finally {
-                try {
-                    if (randomAccessFile != null) randomAccessFile.close();
-                } catch (IOException ignored) {
-                }
-                try {
-                    if (inputStream != null) inputStream.close();
-                } catch (IOException ignored) {
-                }
-                try {
-                    if (response != null) response.close();
-                } catch (Exception ignored) {
-                }
-            }
-        }).start();
+        // 调用抽取后的下载方法，local416Retry初始0
+        realHttpDownload(url, initialDownloadedSize, file, 0);
     }
 
     private String formatSpeed(long speedKB) {
@@ -446,6 +305,182 @@ public class Updater {
             return (seconds / 3600) + "时" + ((seconds % 3600) / 60) + "分";
         }
     }
+
+    /**
+     * @param url 代理下载地址
+     * @param startOffset 起始字节偏移
+     * @param file 输出apk文件
+     * @param local416Retry 当前代理内部416重试次数，最大2次，防递归死循环
+     */
+    private void realHttpDownload(String url, long startOffset, File file, int local416Retry) {
+        new Thread(() -> {
+            okhttp3.OkHttpClient client = OkGoHelper.getDefaultClient();
+            if (client == null) {
+                if (file.exists()) file.delete();
+                mainHandler.post(() -> {
+                    dismissProgressDialog();
+                    if(isActivityAlive()) showToast("网络组件尚未初始化完成，请稍后重试更新");
+                });
+                return;
+            }
+
+            okhttp3.Request.Builder requestBuilder = new okhttp3.Request.Builder()
+                    .url(url)
+                    .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            if(startOffset > 0){
+                requestBuilder.addHeader("Range", "bytes=" + startOffset + "-");
+                Log.d(TAG, "请求从 " + startOffset + " 字节继续");
+            }
+            okhttp3.Request request = requestBuilder.build();
+
+            okhttp3.Response response = null;
+            java.io.InputStream inputStream = null;
+            RandomAccessFile randomAccessFile = null;
+            try {
+                response = client.newCall(request).execute();
+                int code = response.code();
+                boolean isPartial = (code == 206);
+
+                // =========416 处理：本代理内部重试，不切换下一个代理==========
+                if (code == 416) {
+                    Log.w(TAG, "收到416 Requested Range Not Satisfiable，Range无效");
+                    if(local416Retry >=2){
+                        Log.e(TAG,"本代理416重试次数耗尽，切换下一个代理");
+                        mainHandler.post(() -> {
+                            if (progressDialog != null && progressDialog.isShowing()) {
+                                progressDialog.setMessage("切换代理中…");
+                            }
+                        });
+                        mainHandler.postDelayed(() -> doDownload(),800);
+                        return;
+                    }
+                    if(file.exists()) file.delete();
+                    int nextRetry = local416Retry + 1;
+                    mainHandler.postDelayed(() -> realHttpDownload(url,0,file,nextRetry),800);
+                    return;
+                }
+
+                if (code != 200 && code != 206) {
+                    Log.e(TAG, "下载失败http code: " + code);
+                    mainHandler.post(() -> {
+                        if (progressDialog != null && progressDialog.isShowing()) {
+                            progressDialog.setMessage("切换代理中…");
+                        }
+                    });
+                    mainHandler.postDelayed(() -> doDownload(), 800);
+                    return;
+                }
+                // =========正常下载读写逻辑==========
+                long contentLength = response.body().contentLength();
+                long totalSize = contentLength;
+                String contentRange = response.header("Content-Range");
+                if (contentRange != null && contentRange.contains("/")) {
+                    try {
+                        String totalStr = contentRange.substring(contentRange.lastIndexOf('/') + 1);
+                        totalSize = Long.parseLong(totalStr);
+                    } catch (Exception ignored) {}
+                }
+                if (totalSize <=0 && contentLength >0) totalSize = contentLength;
+
+                long freeSpace = file.getParentFile().getFreeSpace();
+                if (freeSpace < totalSize *2){
+                    final long needMb = totalSize *2/(1024*1024);
+                    mainHandler.post(() -> {
+                        dismissProgressDialog();
+                        if(isActivityAlive()) showToast("存储空间不足，需要 "+needMb+" MB");
+                    });
+                    if(file.exists()) file.delete();
+                    return;
+                }
+
+                randomAccessFile = new RandomAccessFile(file,"rw");
+                long currentDownloaded = (startOffset>0 && isPartial) ? startOffset :0;
+                if(currentDownloaded>0){
+                    randomAccessFile.seek(currentDownloaded);
+                }else{
+                    randomAccessFile.setLength(0);
+                }
+                inputStream = response.body().byteStream();
+                byte[] buffer = new byte[32768];
+                long totalRead = currentDownloaded;
+                int len;
+                int lastPercent = -1;
+                lastSpeedUpdateTime = System.currentTimeMillis();
+                lastSpeedUpdateBytes = totalRead;
+
+                while ((len = inputStream.read(buffer)) != -1) {
+                    if(isCancelled){
+                        Log.d(TAG,"用户取消下载");
+                        break;
+                    }
+                    randomAccessFile.write(buffer,0,len);
+                    totalRead += len;
+                    if(totalSize>0){
+                        int percent = (int)(totalRead *100 / totalSize);
+                        if(percent != lastPercent){
+                            lastPercent = percent;
+                            long now = System.currentTimeMillis();
+                            if(now - lastSpeedUpdateTime >=1000){
+                                long speedKB = (totalRead - lastSpeedUpdateBytes)/1024;
+                                long remainingSec = (totalSize - totalRead) / (Math.max(speedKB,1)*1024);
+                                String timeStr = formatTime(remainingSec);
+                                final long currRead = totalRead;
+                                final int finalPercent = percent;
+                                String msg = String.format("速度: %s  剩余: %s  进度： %.1f/%.1f MB",
+                                        formatSpeed(speedKB),timeStr,
+                                        currRead/(1024.0*1024.0), totalSize/(1024.0*1024.0));
+                                mainHandler.post(() -> {
+                                    if(progressDialog != null && progressDialog.isShowing()){
+                                        progressDialog.setProgress(finalPercent);
+                                        progressDialog.setMessage(msg);
+                                    }
+                                });
+                                lastSpeedUpdateTime = now;
+                                lastSpeedUpdateBytes = totalRead;
+                            }
+                        }
+                    }
+                }
+
+                if(isCancelled){
+                    if(file.exists()) file.delete();
+                    return;
+                }
+                if(!file.exists() || file.length() < 1024*1024){
+                    Log.e(TAG,"APK文件异常 size="+(file.exists()?file.length():0));
+                    if(file.exists()) file.delete();
+                    mainHandler.post(() -> {
+                        dismissProgressDialog();
+                        if(isActivityAlive()) showToast("更新包文件异常，请重试");
+                    });
+                    return;
+                }
+                retryCount = 0;
+                mainHandler.post(() -> {
+                    dismissProgressDialog();
+                    installApk(file);
+                });
+
+            } catch (Exception e) {
+                if(isCancelled){
+                    Log.d(TAG,"用户取消下载");
+                    return;
+                }
+                Log.e(TAG,"下载异常:"+e.getMessage());
+                mainHandler.post(() -> {
+                    if (progressDialog != null && progressDialog.isShowing()) {
+                        progressDialog.setMessage("切换代理中…");
+                    }
+                });
+                mainHandler.postDelayed(() -> doDownload(), 800);
+            }finally {
+                try { if(randomAccessFile!=null) randomAccessFile.close(); }catch (IOException ignored){}
+                try { if(inputStream!=null) inputStream.close(); }catch (IOException ignored){}
+                try { if(response!=null) response.close(); }catch (Exception ignored){}
+            }
+        }).start();
+    }
+
 
     private boolean hasStoragePermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {

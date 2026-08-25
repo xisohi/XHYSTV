@@ -1,23 +1,26 @@
 package com.github.tvbox.osc.util;
 
 import android.util.Log;
-
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
 public class Github {
     private static final String TAG = "Github";
     private static final long SPEED_TEST_INTERVAL = 24 * 60 * 60 * 1000L;
-
+    // 测速失败标记，极大时间值，排序会自动压到列表末尾
+    private static final long NO_SPEED = Long.MAX_VALUE;
+    public static final String RELEASE_BASE_URL = "https://github.com/xisohi/XHYSosc/releases/download/XHYSTV/";
     /**
      * 对外公开：执行测速（内部自动判断24h缓存）
      */
     public static void runSpeedTestIfNeed() {
         speedTestProxiesSync();
     }
+
     /**
      * 代理加速源域名列表（不带协议）
      */
@@ -26,14 +29,15 @@ public class Github {
             "github.catvod.com/",
             "ghproxy.net/",
             "gh-proxy.com/",
-            "51.195.241.253:8080/",
             //Android 5.0+
             "ghfast.top/",
             "gh.acmsz.top/",
-            "gh.xisohi.dpdns.org/"
+            "gh.xisohi.dpdns.org/",
+            //无法测速代理
+            "51.195.241.253:8080/"
     };
 
-    // 测速结果缓存
+    // 测速结果缓存：保存代理原始索引顺序
     private static List<Integer> speedRanking = new ArrayList<>();
     private static volatile long lastSpeedTestTime = 0;
 
@@ -75,7 +79,7 @@ public class Github {
      * 获取 APK 下载地址（使用最快代理）
      */
     public static String getApk(String name) {
-        String githubUrl = "https://github.com/xisohi/XHYSosc/releases/download/XHYSTV/" + name + ".apk";
+        String githubUrl = RELEASE_BASE_URL + name + ".apk";
         return getAcceleratedUrl(githubUrl);
     }
 
@@ -117,31 +121,40 @@ public class Github {
     }
 
     /**
-     * 同步测速
+     * 同步测速【改造点：测速异常代理不丢弃，NO_SPEED标记，排序放末尾兜底】
      */
     private static synchronized void speedTestProxiesSync() {
         if (System.currentTimeMillis() - lastSpeedTestTime < SPEED_TEST_INTERVAL && !speedRanking.isEmpty()) {
             return;
         }
-
         Log.d(TAG, "========== 开始测速 ==========");
         List<ProxySpeed> speeds = new ArrayList<>();
         String[] proxyUrls = getProxyUrls();
         String testUrl = getSpeedTestUrl();
 
         for (int i = 0; i < proxyUrls.length; i++) {
-            long start = System.currentTimeMillis();
-            boolean reachable = pingProxy(proxyUrls[i] + testUrl);
-            if (reachable) {
-                long elapsed = System.currentTimeMillis() - start;
-                speeds.add(new ProxySpeed(i, elapsed));
-                Log.d(TAG, "代理 " + i + " (" + proxyUrls[i] + ") 响应时间: " + elapsed + "ms ✅");
-            } else {
-                Log.w(TAG, "代理 " + i + " 不可达: " + proxyUrls[i] + " ❌");
+            long costMs;
+            String fullTestUrl = proxyUrls[i] + testUrl;
+            try {
+                long start = System.currentTimeMillis();
+                boolean reachable = pingProxy(fullTestUrl);
+                if (reachable) {
+                    costMs = System.currentTimeMillis() - start;
+                    Log.d(TAG, "代理 " + i + " (" + proxyUrls[i] + ") 响应时间: " + costMs + "ms ✅");
+                } else {
+                    // ping返回false，标记测速失败
+                    costMs = NO_SPEED;
+                    Log.w(TAG, "代理 " + i + " (" + proxyUrls[i] + ") ping返回不可达，放入兜底末尾 ❌");
+                }
+            } catch (Exception e) {
+                costMs = NO_SPEED;
+                Log.w(TAG, "代理 " + i + " (" + proxyUrls[i] + ") 测速异常，放入兜底末尾 ❌");
             }
+            speeds.add(new ProxySpeed(i, costMs));
         }
 
-        java.util.Collections.sort(speeds, new Comparator<ProxySpeed>() {
+        // 排序：耗时小的在前；NO_SPEED(Long.MAX_VALUE)全部排列表尾部
+        Collections.sort(speeds, new Comparator<ProxySpeed>() {
             @Override
             public int compare(ProxySpeed o1, ProxySpeed o2) {
                 return Long.compare(o1.time, o2.time);
@@ -152,17 +165,10 @@ public class Github {
         for (ProxySpeed ps : speeds) {
             speedRanking.add(ps.index);
         }
-
         lastSpeedTestTime = System.currentTimeMillis();
-        if (!speedRanking.isEmpty()) {
-            Log.i(TAG, "测速完成，最快代理: " + proxyUrls[speedRanking.get(0)]);
-            Log.i(TAG, "代理优先级顺序: " + speedRanking.toString());
-        } else {
-            Log.w(TAG, "测速完成，无可用代理");
-            for (int i = 0; i < proxyUrls.length; i++) {
-                speedRanking.add(i);
-            }
-        }
+
+        Log.i(TAG, "测速完成，最快代理: " + proxyUrls[speedRanking.get(0)]);
+        Log.i(TAG, "代理优先级顺序: " + speedRanking.toString());
         Log.d(TAG, "========== 测速结束 ==========");
     }
 
@@ -186,22 +192,18 @@ public class Github {
                 Log.w(TAG, "OkHttpClient未初始化，使用Legacy测速");
                 return pingProxyLegacy(testUrl);
             }
-
             okhttp3.OkHttpClient pingClient = client.newBuilder()
                     .connectTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
                     .readTimeout(5, java.util.concurrent.TimeUnit.SECONDS)
                     .build();
-
             okhttp3.Request request = new okhttp3.Request.Builder()
                     .url(testUrl)
                     .head()
                     .addHeader("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
                     .build();
-
             try (okhttp3.Response response = pingClient.newCall(request).execute()) {
                 int code = response.code();
-                // 只要服务器有响应（2xx, 3xx, 4xx），我们就认为代理可用
-                // 只有连接错误（IOException）才认为不可达
+                // 只要服务器有响应（2xx,3xx,4xx），代理判定可达；仅IO异常才算不可达
                 if (code > 0) {
                     Log.d(TAG, "ping 响应码: " + code + " (代理可达)");
                     return true;
