@@ -382,14 +382,23 @@ public class Updater {
                 }
                 if (totalSize <=0 && contentLength >0) totalSize = contentLength;
 
-                long freeSpace = file.getParentFile().getFreeSpace();
-                if (freeSpace < totalSize *2){
-                    final long needMb = totalSize *2/(1024*1024);
+                File parentDir = file.getParentFile();
+                long usableSpace = parentDir.getUsableSpace();
+                final long totalSizeFinal = totalSize;
+                final long needMb = (totalSizeFinal * 2) / (1024 * 1024);
+                final long realUsableMb = usableSpace / (1024 * 1024);
+                Log.w(TAG, "【存储调试】需要=" + needMb + " MB，APP真实可用=" + realUsableMb + " MB");
+
+                if (usableSpace < totalSizeFinal * 2) {
                     mainHandler.post(() -> {
                         dismissProgressDialog();
-                        if(isActivityAlive()) showToast("存储空间不足，需要 "+needMb+" MB");
+                        if (isActivityAlive()) {
+                            showToast("存储空间不足，需要 " + needMb + " MB");
+                        }
                     });
-                    if(file.exists()) file.delete();
+                    if (file.exists()) {
+                        file.delete();
+                    }
                     return;
                 }
 
