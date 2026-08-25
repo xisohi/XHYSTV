@@ -104,7 +104,7 @@ public class Updater {
 
     private void notifyUser(String msg) {
         if (!silentMode && isActivityAlive()) {
-            showToast(msg);
+            mainHandler.post(() -> showToast(msg));
         }
     }
 
