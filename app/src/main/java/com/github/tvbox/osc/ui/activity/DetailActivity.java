@@ -1841,7 +1841,11 @@ public class DetailActivity extends BaseActivity {
         boolean needRefreshSeries = previewOrientationChanged;
         setFullPreview(false);
         previewOrientationChanged = false;
-        if (needRefreshSeries) refreshSeriesAfterFullPreview();
+        if (needRefreshSeries) {
+            refreshSeriesAfterFullPreview();
+        } else {
+            syncSeriesSelectionAfterFullPreview();
+        }
     }
 
     private void refreshSeriesAfterFullPreview() {
@@ -1853,6 +1857,32 @@ public class DetailActivity extends BaseActivity {
                 mGridView.getRecycledViewPool().clear();
                 mGridView.setAdapter(seriesAdapter);
                 refreshList();
+            }
+        });
+    }
+
+    private void syncSeriesSelectionAfterFullPreview() {
+        if (seriesAdapter == null || vodInfo == null || vodInfo.seriesMap == null || TextUtils.isEmpty(vodInfo.playFlag)) return;
+        List<VodInfo.VodSeries> list = vodInfo.seriesMap.get(vodInfo.playFlag);
+        if (list == null || list.isEmpty()) return;
+        vodInfo.playIndex = Math.max(0, Math.min(vodInfo.playIndex, list.size() - 1));
+        setSeriesGroupOptions();
+        mGridView.post(new Runnable() {
+            @Override
+            public void run() {
+                int firstVisible = mGridView.getFirstVisiblePosition();
+                int lastVisible = mGridView.getLastVisiblePosition();
+                if (vodInfo.playIndex < firstVisible || vodInfo.playIndex > lastVisible) {
+                    customSeriesScrollPos(vodInfo.playIndex);
+                }
+            }
+        });
+        mSeriesGroupView.post(new Runnable() {
+            @Override
+            public void run() {
+                if (mSeriesGroupView.getVisibility() == View.VISIBLE) {
+                    mSeriesGroupView.scrollToPosition(selectedSeriesGroupPosition);
+                }
             }
         });
     }
