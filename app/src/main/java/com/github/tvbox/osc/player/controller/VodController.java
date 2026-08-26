@@ -1082,7 +1082,9 @@ public class VodController extends BaseController {
             int[] videoSize = mControlWrapper.getVideoSize();
             int width = videoSize[0];
             int height = videoSize[1];
-            showButton = width > 0 && height > 0 && width <= height && ScreenUtils.getSqrt(mActivity) < 10.0;
+            long duration = safeTimeMs(mControlWrapper.getDuration());
+            boolean shortVideo = duration > 0 && duration < 12 * 60 * 1000L;
+            showButton = width > 0 && height > 0 && (width <= height || shortVideo) && ScreenUtils.getSqrt(mActivity) < 10.0;
         }
         mLandscapePortraitBtn.setVisibility(showButton ? VISIBLE : GONE);
         if (showButton) mLandscapePortraitBtn.setText(isPortrait ? "横屏" : "竖屏");
