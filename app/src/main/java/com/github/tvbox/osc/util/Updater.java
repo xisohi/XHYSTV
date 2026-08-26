@@ -33,17 +33,12 @@ import java.io.RandomAccessFile;
 import java.nio.channels.FileChannel;
 
 /**
- * TVBox 应用更新管理器【最终完整版】
- * 修复清单：
- * 1. 修复三处 U+2011 特殊连字符bug(User-Agent / Content‑Range / package‑archive)
- * 2. Activity销毁判断 isFinishing + isDestroyed
- * 3. 禁止回退getCacheDir私有缓存，优先externalCache，失败落到Download公共目录
- * 4. 修复取消下载错误interrupt，使用isCancelled标记
- * 5. 区分静默/手动更新：静默删除残留apk禁用断点续传；手动保留断点续传
- * 6. OkGo未初始化时清理残缺APK并提示
- * 7. 下载完成APK大小基础校验(>1MB)
- * 8. Github.runSpeedTestIfNeed()复用24h测速缓存，不强制测速
- * 9. ✨无感代理切换：重试不复建ProgressDialog，不弹Toast，仅文字提示，保留已下载字节
+ * TVBox 应用更新管理器
+ * 支持：
+ * 1. Android 4.4+ 全版本兼容
+ * 2. Java版自动检测并提示升级到Python版
+ * 3. 根据CPU架构自动选择对应版本 (python32/python64)
+ * 4. "不再提示"仅对本次生效，应用重启后重新询问
  */
 public class Updater {
     private static final String TAG = "Updater";
@@ -58,6 +53,8 @@ public class Updater {
     private volatile boolean isCancelled = false;
     private long lastSpeedUpdateTime = 0;
     private long lastSpeedUpdateBytes = 0;
+    private String targetFlavorOverride = null;
+    private boolean skipPythonPrompt = false;  // 仅本次运行有效，重启重置
 
     public static Updater create() {
         return new Updater();
@@ -95,9 +92,15 @@ public class Updater {
     }
 
     private String getApkName() {
-        String flavor = BuildConfig.FLAVOR;
-        if (flavor == null || flavor.isEmpty()) {
-            flavor = "java";
+        String flavor;
+        if (targetFlavorOverride != null && !targetFlavorOverride.isEmpty()) {
+            // 用户手动选择了版本
+            flavor = targetFlavorOverride;
+            Log.d(TAG, "使用用户选择的版本: " + flavor);
+        } else {
+            // 自动推荐
+            flavor = DeviceInfoHelper.getRecommendedFlavor(activity);
+            Log.d(TAG, "自动推荐版本: " + flavor);
         }
         return "XHYSTV-" + flavor;
     }
@@ -142,7 +145,7 @@ public class Updater {
         TextView btnConfirm = view.findViewById(R.id.confirm);
         TextView btnCancel = view.findViewById(R.id.cancel);
         tvVersion.setText(activity.getString(R.string.update_version, version));
-        tvFlavor.setText(getFlavorDisplayName(BuildConfig.FLAVOR));
+        tvFlavor.setText(DeviceInfoHelper.getFlavorDisplayName(BuildConfig.FLAVOR));
         tvDesc.setText(desc);
         btnConfirm.setFocusable(true);
         btnCancel.setFocusable(true);
@@ -156,10 +159,10 @@ public class Updater {
             btnConfirm.setEnabled(false);
             btnConfirm.setText("准备下载...");
             showToast("正在选择最优下载线路...");
+
             new Thread(() -> {
                 try {
                     long now = System.currentTimeMillis();
-                    // 复用24小时测速缓存，不再强制清空全部代理测速
                     if (now - Github.getLastSpeedTestTime() > Github.getSpeedTestInterval()) {
                         Github.runSpeedTestIfNeed();
                     }
@@ -168,20 +171,78 @@ public class Updater {
                     Log.e(TAG, "测速失败: " + e.getMessage());
                 }
                 mainHandler.post(() -> {
-                    // 测速结束回到主线程，先校验Activity存活状态
                     if (!isActivityAlive()) {
                         showToast("页面已失效，请重新点击更新");
                         return;
                     }
-                    isInstallTriggered = false;
-                    retryCount = 0;
-                    doDownload();
+
+                    // 检查是否需要询问 Python 升级
+                    String current = BuildConfig.FLAVOR;
+                    boolean isJava = current == null || !current.startsWith("python");
+                    boolean isSupported = DeviceInfoHelper.isPythonSupported(activity);
+                    boolean shouldShowPrompt = isJava && isSupported && !skipPythonPrompt;
+
+                    if (shouldShowPrompt) {
+                        showPythonUpgradeSuggestion();
+                    } else {
+                        isInstallTriggered = false;
+                        retryCount = 0;
+                        doDownload();
+                    }
                 });
             }).start();
         });
 
         btnCancel.setOnClickListener(v -> dialog.dismiss());
         btnConfirm.requestFocus();
+    }
+
+    /**
+     * 显示 Python 升级建议弹窗
+     * "不再提示"仅对本次生效，应用重启后重新询问
+     */
+    private void showPythonUpgradeSuggestion() {
+        if (!isActivityAlive()) return;
+
+        String targetFlavor = DeviceInfoHelper.getRecommendedFlavor(activity);
+        String displayName = DeviceInfoHelper.getFlavorDisplayName(targetFlavor);
+        String currentName = DeviceInfoHelper.getFlavorDisplayName(BuildConfig.FLAVOR);
+        String arch = DeviceInfoHelper.getCpuArchitecture();
+        String archDisplay = arch != null ? arch : "未知";
+
+        new AlertDialog.Builder(activity)
+                .setTitle("🎯 检测到更好的版本")
+                .setMessage("当前版本: " + currentName + "\n" +
+                        "推荐版本: " + displayName + "\n" +
+                        "CPU 架构: " + archDisplay + "\n\n" +
+                        "📦 Python 版优势：\n" +
+                        "• 更多爬虫源支持\n" +
+                        "• 解析能力更强\n" +
+                        "• 功能持续更新\n\n" +
+                        "⚠️ 需要额外 ~50MB 存储空间\n\n" +
+                        "是否切换到 Python 版？")
+                .setPositiveButton("✅ 切换到 Python 版", (d, w) -> {
+                    targetFlavorOverride = targetFlavor;
+                    isInstallTriggered = false;
+                    retryCount = 0;
+                    doDownload();
+                })
+                .setNegativeButton("保持 " + currentName, (d, w) -> {
+                    targetFlavorOverride = BuildConfig.FLAVOR;
+                    isInstallTriggered = false;
+                    retryCount = 0;
+                    doDownload();
+                })
+                .setNeutralButton("不再提示", (d, w) -> {
+                    // 仅本次运行有效，应用重启后重置为 false
+                    skipPythonPrompt = true;
+                    targetFlavorOverride = BuildConfig.FLAVOR;
+                    isInstallTriggered = false;
+                    retryCount = 0;
+                    doDownload();
+                })
+                .setCancelable(false)
+                .show();
     }
 
     private void doDownload() {
@@ -206,23 +267,20 @@ public class Updater {
         final File file = new File(cacheDir, "update.apk");
         long downloadedSize = 0;
 
-        // ====================== 方案A 文件逻辑 只保留这一份！======================
+        // 文件逻辑
         if (!silentMode) {
-            // 手动更新：只有第一轮retryCount==0删除历史残留apk，取消跨会话断点续传
             if (retryCount == 0) {
                 if (file.exists()) {
                     Log.i(TAG, "手动更新：首次尝试，删除历史残留apk，从头开始下载");
                     file.delete();
                 }
             } else {
-                // 同一次下载会话切换代理：保留文件，复用已下载字节做代理间断点续传
                 if (file.exists()) {
                     downloadedSize = file.length();
                     Log.i(TAG, "手动更新，切换代理，复用已下载 " + downloadedSize + " 字节继续下载");
                 }
             }
         } else {
-            // 冷启动静默更新逻辑保持不变
             if (retryCount == 0) {
                 if (file.exists()) {
                     Log.w(TAG, "静默自动更新：首次尝试，删除历史残留旧apk");
@@ -235,11 +293,8 @@ public class Updater {
                 }
             }
         }
-        // ======================================================================
 
         final long initialDownloadedSize = downloadedSize;
-
-        // ✅文件处理完成之后，再做retryCount自增
         retryCount++;
 
         if (url == null) {
@@ -252,7 +307,7 @@ public class Updater {
         }
         Log.i(TAG, "下载: " + url);
 
-        // ---------- ProgressDialog弹窗逻辑 ----------
+        // ProgressDialog弹窗逻辑
         mainHandler.post(() -> {
             if (retryCount == 1) {
                 if (dialog != null && dialog.isShowing()) dialog.dismiss();
@@ -281,7 +336,6 @@ public class Updater {
             }
         });
 
-        // 调用抽取后的下载方法，local416Retry初始0
         realHttpDownload(url, initialDownloadedSize, file, 0);
     }
 
@@ -307,7 +361,7 @@ public class Updater {
      * @param url 代理下载地址
      * @param startOffset 起始字节偏移
      * @param file 输出apk文件
-     * @param local416Retry 当前代理内部416重试次数，最大2次，防递归死循环
+     * @param local416Retry 当前代理内部416重试次数，最大2次
      */
     private void realHttpDownload(String url, long startOffset, File file, int local416Retry) {
         new Thread(() -> {
@@ -338,7 +392,7 @@ public class Updater {
                 int code = response.code();
                 boolean isPartial = (code == 206);
 
-                // =========416 处理：本代理内部重试，不切换下一个代理==========
+                // 416 处理
                 if (code == 416) {
                     Log.w(TAG, "收到416 Requested Range Not Satisfiable，Range无效");
                     if(local416Retry >=2){
@@ -367,7 +421,8 @@ public class Updater {
                     mainHandler.postDelayed(() -> doDownload(), 800);
                     return;
                 }
-                // =========正常下载读写逻辑==========
+
+                // 正常下载
                 long contentLength = response.body().contentLength();
                 long totalSize = contentLength;
                 String contentRange = response.header("Content-Range");
@@ -380,23 +435,13 @@ public class Updater {
                 if (totalSize <=0 && contentLength >0) totalSize = contentLength;
 
                 File parentDir = file.getParentFile();
+                // 简化为
                 long usableSpace = parentDir.getUsableSpace();
-                long freeSpace = parentDir.getFreeSpace();
-                final long totalSizeFinal = totalSize;
-                final long needMb = (totalSizeFinal * 2) / (1024 * 1024);
-                long realUsableMb;
-
-// 固件BUG兼容：usableSpace返回0异常时降级使用getFreeSpace
                 if (usableSpace <= 0) {
-                    realUsableMb = freeSpace / 1024 / 1024;
-                    Log.w(TAG, "【存储调试】usableSpace返回0，固件异常，使用freeSpace，需要=" + needMb + " MB，分区空闲=" + realUsableMb + " MB");
-                    usableSpace = freeSpace;
-                } else {
-                    realUsableMb = usableSpace / 1024 / 1024;
-                    Log.w(TAG, "【存储调试】需要=" + needMb + " MB，APP真实可用=" + realUsableMb + " MB");
+                    usableSpace = parentDir.getFreeSpace();
                 }
-
-                if (usableSpace < totalSizeFinal * 2) {
+                final long needMb = (totalSize * 2) / (1024 * 1024);
+                if (usableSpace < totalSize * 2) {
                     mainHandler.post(() -> {
                         dismissProgressDialog();
                         if (isActivityAlive()) {
@@ -497,7 +542,6 @@ public class Updater {
         }).start();
     }
 
-
     private boolean hasStoragePermission() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
             return true;
@@ -505,25 +549,22 @@ public class Updater {
         return ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED;
     }
+
     /**
      * 获取可用的下载目录
      * 兼容 Android 4.4+ (API 19+)
-     * 针对电视盒子优化：优先使用 /data 分区下的目录（空间充足）
+     * 优先使用 /data 分区下的应用私有目录
      */
     private File getAvailableCacheDir() {
-        Log.d(TAG, "========== 选择下载目录 ==========");
-
-        // 使用应用私有 files 目录
+        // 使用应用私有 files 目录（在 /data 分区，空间充足）
         File filesDir = activity.getFilesDir();
         if (filesDir != null) {
-            // 确保目录存在（防御性编程）
             if (!filesDir.exists()) {
                 filesDir.mkdirs();
             }
             if (filesDir.canWrite()) {
                 long space = filesDir.getUsableSpace();
-                Log.i(TAG, "✅ 使用应用 files 目录: " + filesDir.getPath());
-                Log.i(TAG, "   可用空间: " + space/1024/1024 + "MB");
+                Log.i(TAG, "下载目录: " + filesDir.getPath() + " (可用: " + space/1024/1024 + "MB)");
                 return filesDir;
             }
         }
@@ -536,8 +577,7 @@ public class Updater {
             }
             if (cacheDir.canWrite()) {
                 long space = cacheDir.getUsableSpace();
-                Log.i(TAG, "✅ 使用应用 cache 目录: " + cacheDir.getPath());
-                Log.i(TAG, "   可用空间: " + space/1024/1024 + "MB");
+                Log.i(TAG, "下载目录(备选): " + cacheDir.getPath() + " (可用: " + space/1024/1024 + "MB)");
                 return cacheDir;
             }
         }
@@ -548,7 +588,6 @@ public class Updater {
     }
 
     private void installApk(File file) {
-        // 先校验Activity存活状态
         if (!isActivityAlive()) {
             showToast("页面已销毁，请手动重新更新");
             return;
@@ -560,7 +599,7 @@ public class Updater {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             Uri uri;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // Android7.0 SDK24才需要FileProvider
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 uri = FileProvider.getUriForFile(activity,
                         BuildConfig.APPLICATION_ID + ".fileprovider", file);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -574,11 +613,12 @@ public class Updater {
                 return;
             }
             activity.startActivity(intent);
+            // 2分钟后删除APK，给用户充足时间完成安装
             mainHandler.postDelayed(() -> {
                 if (file.exists() && file.delete()) {
                     Log.d(TAG, "APK 已删除，释放空间");
                 }
-            }, 8000);
+            }, 120000);
         } catch (Exception e) {
             Log.e(TAG, "安装失败: " + e.getMessage(), e);
             fallbackInstall(file);
@@ -688,8 +728,7 @@ public class Updater {
     }
 
     private void dismissProgressDialog() {
-        if (isActivityAlive()
-                && progressDialog != null && progressDialog.isShowing()) {
+        if (isActivityAlive() && progressDialog != null && progressDialog.isShowing()) {
             progressDialog.dismiss();
         }
     }
@@ -697,19 +736,6 @@ public class Updater {
     private void showToast(String msg) {
         if (isActivityAlive()) {
             Toast.makeText(activity, msg, Toast.LENGTH_LONG).show();
-        }
-    }
-
-    private String getFlavorDisplayName(String flavor) {
-        if (flavor == null) return "未知版本";
-        switch (flavor) {
-            case "java": return "Java通用版";
-            case "java32": return "Java 32位版";
-            case "java64": return "Java 64位版";
-            case "python": return "Python通用版";
-            case "python32": return "Python 32位版";
-            case "python64": return "Python 64位版";
-            default: return flavor;
         }
     }
 }
