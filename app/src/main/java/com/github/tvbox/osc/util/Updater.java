@@ -237,9 +237,6 @@ public class Updater {
         }
         // ======================================================================
 
-        if (!file.getParentFile().exists()) {
-            file.getParentFile().mkdirs();
-        }
         final long initialDownloadedSize = downloadedSize;
 
         // ✅文件处理完成之后，再做retryCount自增
@@ -384,10 +381,20 @@ public class Updater {
 
                 File parentDir = file.getParentFile();
                 long usableSpace = parentDir.getUsableSpace();
+                long freeSpace = parentDir.getFreeSpace();
                 final long totalSizeFinal = totalSize;
                 final long needMb = (totalSizeFinal * 2) / (1024 * 1024);
-                final long realUsableMb = usableSpace / (1024 * 1024);
-                Log.w(TAG, "【存储调试】需要=" + needMb + " MB，APP真实可用=" + realUsableMb + " MB");
+                long realUsableMb;
+
+// 固件BUG兼容：usableSpace返回0异常时降级使用getFreeSpace
+                if (usableSpace <= 0) {
+                    realUsableMb = freeSpace / 1024 / 1024;
+                    Log.w(TAG, "【存储调试】usableSpace返回0，固件异常，使用freeSpace，需要=" + needMb + " MB，分区空闲=" + realUsableMb + " MB");
+                    usableSpace = freeSpace;
+                } else {
+                    realUsableMb = usableSpace / 1024 / 1024;
+                    Log.w(TAG, "【存储调试】需要=" + needMb + " MB，APP真实可用=" + realUsableMb + " MB");
+                }
 
                 if (usableSpace < totalSizeFinal * 2) {
                     mainHandler.post(() -> {
@@ -498,21 +505,46 @@ public class Updater {
         return ContextCompat.checkSelfPermission(activity, Manifest.permission.WRITE_EXTERNAL_STORAGE)
                 == PackageManager.PERMISSION_GRANTED;
     }
-
     /**
-     * 关键：绝不回退getCacheDir()内部私有缓存，Android4.4‑5盒子安装器读不到
-     * 优先外部缓存，失败直接落到公共Download目录
+     * 获取可用的下载目录
+     * 兼容 Android 4.4+ (API 19+)
+     * 针对电视盒子优化：优先使用 /data 分区下的目录（空间充足）
      */
     private File getAvailableCacheDir() {
-        if (hasStoragePermission()) {
-            File externalCache = activity.getExternalCacheDir();
-            if (externalCache != null && externalCache.canWrite()) {
-                Log.d(TAG, "使用外部缓存目录: " + externalCache.getPath());
-                return externalCache;
+        Log.d(TAG, "========== 选择下载目录 ==========");
+
+        // 使用应用私有 files 目录
+        File filesDir = activity.getFilesDir();
+        if (filesDir != null) {
+            // 确保目录存在（防御性编程）
+            if (!filesDir.exists()) {
+                filesDir.mkdirs();
+            }
+            if (filesDir.canWrite()) {
+                long space = filesDir.getUsableSpace();
+                Log.i(TAG, "✅ 使用应用 files 目录: " + filesDir.getPath());
+                Log.i(TAG, "   可用空间: " + space/1024/1024 + "MB");
+                return filesDir;
             }
         }
-        Log.w(TAG, "外部缓存不可用，回退公共Download目录，不使用内部私有cache");
-        return Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+
+        // 备选：cache 目录
+        File cacheDir = activity.getCacheDir();
+        if (cacheDir != null) {
+            if (!cacheDir.exists()) {
+                cacheDir.mkdirs();
+            }
+            if (cacheDir.canWrite()) {
+                long space = cacheDir.getUsableSpace();
+                Log.i(TAG, "✅ 使用应用 cache 目录: " + cacheDir.getPath());
+                Log.i(TAG, "   可用空间: " + space/1024/1024 + "MB");
+                return cacheDir;
+            }
+        }
+
+        // 最终兜底
+        Log.e(TAG, "⚠️ 所有目录异常，使用 filesDir 兜底");
+        return activity.getFilesDir();
     }
 
     private void installApk(File file) {
@@ -528,7 +560,7 @@ public class Updater {
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             Uri uri;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) { // Android7.0 SDK24才需要FileProvider
                 uri = FileProvider.getUriForFile(activity,
                         BuildConfig.APPLICATION_ID + ".fileprovider", file);
                 intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
