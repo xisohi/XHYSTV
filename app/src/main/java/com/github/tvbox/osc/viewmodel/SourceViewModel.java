@@ -1039,6 +1039,7 @@ public class SourceViewModel extends ViewModel {
                             Spider sp = ApiConfig.get().getCSP(sourceBean);
                             if (TextUtils.isEmpty(requestUrl)) return "";
                             try {
+                                LOG.i("echo--getPlay--id: " + requestUrl);
                                 return sp.playerContent(playFlag, requestUrl, ApiConfig.get().getVipParseFlags());
                             } catch (Exception e) {
                                 LOG.i("echo--getPlay--error: " + e.getMessage());

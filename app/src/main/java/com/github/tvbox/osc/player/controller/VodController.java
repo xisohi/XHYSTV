@@ -18,6 +18,7 @@ import android.os.Message;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.webkit.WebView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -575,7 +576,7 @@ public class VodController extends BaseController {
                 hideBottom();
             }
         });
-        mNextBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mNextBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 FastClickCheckUtil.check(view);
@@ -591,7 +592,7 @@ public class VodController extends BaseController {
                 hideBottom();
             }
         });
-        mPreBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mPreBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 FastClickCheckUtil.check(view);
@@ -619,7 +620,7 @@ public class VodController extends BaseController {
                 }
             }
         });
-        mPlayerScaleBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mPlayerScaleBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 myHandle.removeCallbacks(myRunnable);
@@ -688,7 +689,7 @@ public class VodController extends BaseController {
             }
         });
 
-        mPlayerSpeedBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mPlayerSpeedBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 myHandle.removeCallbacks(myRunnable);
@@ -771,7 +772,7 @@ public class VodController extends BaseController {
             }
         });
 
-        mPlayerBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mPlayerBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 myHandle.removeCallbacks(myRunnable);
@@ -893,7 +894,7 @@ public class VodController extends BaseController {
                 }
             }
         });
-        mPlayerTimeStartBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mPlayerTimeStartBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 try {
@@ -923,7 +924,7 @@ public class VodController extends BaseController {
                 }
             }
         });
-        mPlayerTimeSkipBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mPlayerTimeSkipBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 try {
@@ -944,7 +945,7 @@ public class VodController extends BaseController {
                 hideBottom();
             }
         });
-        mZimuBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mZimuBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 mSubtitleView.setVisibility(View.GONE);
@@ -983,7 +984,7 @@ public class VodController extends BaseController {
                 listener.showDanmuSetting();
             }
         });
-        mDanmuSettingBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mDanmuSettingBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 FastClickCheckUtil.check(view);
@@ -1000,7 +1001,7 @@ public class VodController extends BaseController {
                 hideBottom();
             }
         });
-        mDanmuSearchUiBtn.setOnLongClickListener(new OnLongClickListener() {
+        setOnTvLongClickListener(mDanmuSearchUiBtn, new OnLongClickListener() {
             @Override
             public boolean onLongClick(View view) {
                 listener.searchDanmuUi(true);
@@ -1638,6 +1639,56 @@ public class VodController extends BaseController {
             speedPlayEnd();
         }
         return super.onTouchEvent(e);
+    }
+
+    /**
+     * 为播放菜单按钮补充遥控器确认键的长按处理。
+     * 部分电视盒子不会把确认键长按分发为 View.OnLongClickListener。
+     */
+    private void setOnTvLongClickListener(final View view, final OnLongClickListener listener) {
+        view.setOnLongClickListener(listener);
+        view.setOnKeyListener(new OnKeyListener() {
+            private boolean longPressTriggered;
+            private final Runnable longPressRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (view.hasFocus() && view.isShown()) {
+                        longPressTriggered = true;
+                        view.performLongClick();
+                    }
+                }
+            };
+
+            private boolean isConfirmKey(int keyCode) {
+                return keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                        || keyCode == KeyEvent.KEYCODE_ENTER
+                        || keyCode == KeyEvent.KEYCODE_NUMPAD_ENTER
+                        || keyCode == KeyEvent.KEYCODE_BUTTON_A;
+            }
+
+            @Override
+            public boolean onKey(View v, int keyCode, KeyEvent event) {
+                if (!isConfirmKey(keyCode)) {
+                    return false;
+                }
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    if (event.getRepeatCount() == 0) {
+                        longPressTriggered = false;
+                        view.removeCallbacks(longPressRunnable);
+                        view.postDelayed(longPressRunnable, ViewConfiguration.getLongPressTimeout());
+                    }
+                    return true;
+                }
+                if (event.getAction() == KeyEvent.ACTION_UP) {
+                    view.removeCallbacks(longPressRunnable);
+                    if (!longPressTriggered) {
+                        view.performClick();
+                    }
+                    return true;
+                }
+                return true;
+            }
+        });
     }
 
 
