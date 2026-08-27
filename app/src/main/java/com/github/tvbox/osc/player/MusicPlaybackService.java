@@ -39,6 +39,7 @@ public class MusicPlaybackService extends Service {
     private static final String ACTION_PAUSE = "com.github.tvbox.osc.music.PAUSE";
     private static final String ACTION_PREVIOUS = "com.github.tvbox.osc.music.PREVIOUS";
     private static final String ACTION_NEXT = "com.github.tvbox.osc.music.NEXT";
+    private static final String ACTION_PLACEHOLDER = "com.github.tvbox.osc.music.PLACEHOLDER";
     private static final String ACTION_STOP = "com.github.tvbox.osc.music.STOP";
     private static final String ACTION_SEEK = "com.github.tvbox.osc.music.SEEK";
     private static final String EXTRA_TITLE = "title";
@@ -286,13 +287,13 @@ public class MusicPlaybackService extends Service {
                 .setOngoing(playing)
                 .setDeleteIntent(actionIntent(ACTION_STOP))
                 .setStyle(new MediaStyle().setMediaSession(mediaSession.getSessionToken())
-                        .setShowActionsInCompactView(0, 1, 2));
+                        .setShowActionsInCompactView(1, 2, 3));
         if (artwork != null) builder.setLargeIcon(artwork);
-        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_previous, "上一首", actionIntent(ACTION_PREVIOUS)));
-        builder.addAction(new NotificationCompat.Action(playing ? android.R.drawable.ic_media_pause : android.R.drawable.ic_media_play,
+        builder.addAction(new NotificationCompat.Action(R.drawable.media_action_placeholder, "", actionIntent(ACTION_PLACEHOLDER)));
+        builder.addAction(new NotificationCompat.Action(R.drawable.exo_icon_previous, "上一首", actionIntent(ACTION_PREVIOUS)));
+        builder.addAction(new NotificationCompat.Action(playing ? R.drawable.exo_icon_pause : R.drawable.exo_icon_play,
                 playing ? "暂停" : "播放", actionIntent(playing ? ACTION_PAUSE : ACTION_PLAY)));
-        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_media_next, "下一首", actionIntent(ACTION_NEXT)));
-        builder.addAction(new NotificationCompat.Action(android.R.drawable.ic_menu_close_clear_cancel, "停止", actionIntent(ACTION_STOP)));
+        builder.addAction(new NotificationCompat.Action(R.drawable.exo_icon_next, "下一首", actionIntent(ACTION_NEXT)));
         return builder.build();
     }
 

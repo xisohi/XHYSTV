@@ -467,7 +467,7 @@ public class SearchActivity extends BaseActivity {
         int itemHeight = getResources().getDimensionPixelSize(R.dimen.vs_50);
         int itemMargin = getResources().getDimensionPixelSize(R.dimen.vs_5);
         int paddingH = getResources().getDimensionPixelSize(R.dimen.vs_10);
-        int maxWidth = getResources().getDimensionPixelSize(R.dimen.vs_220);
+        int maxWidth = getResources().getDimensionPixelSize(R.dimen.vs_180);
         float textSize = getResources().getDimension(R.dimen.ts_22);
         int textColor = getResources().getColor(R.color.color_FFFFFF);
         for (int i = 0; i < history.size(); i++) {

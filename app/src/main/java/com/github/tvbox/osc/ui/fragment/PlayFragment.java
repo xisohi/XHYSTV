@@ -1442,11 +1442,8 @@ public class PlayFragment extends BaseLazyFragment {
             audioPlayback = false;
             return;
         }
-        String episode = String.valueOf(Math.max(0, mVodInfo.playIndex) + 1);
         VodInfo.VodSeries currentSeries = getCurrentSeries(mVodInfo.playFlag, mVodInfo.playIndex);
-        if (currentSeries != null && !TextUtils.isEmpty(currentSeries.name)) {
-            episode += " - " + currentSeries.name;
-        }
+        String episode = currentSeries == null || TextUtils.isEmpty(currentSeries.name) ? "" : currentSeries.name;
         MusicPlaybackService.update(getContext(), this,
                 TextUtils.isEmpty(mVodInfo.name) ? "TVBox" : mVodInfo.name,
                 episode, mVodInfo.pic, mVideoView.getCurrentPosition(),
