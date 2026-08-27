@@ -462,44 +462,51 @@ public class SearchActivity extends BaseActivity {
     }
 
     private void refreshSearchHistoryWords() {
-        ArrayList<String> history = Hawk.get(HawkConfig.SEARCH_HISTORY, new ArrayList<String>());
-        historyWordGrid.removeAllViews();
-        int itemHeight = getResources().getDimensionPixelSize(R.dimen.vs_50);
-        int itemMargin = getResources().getDimensionPixelSize(R.dimen.vs_5);
-        int paddingH = getResources().getDimensionPixelSize(R.dimen.vs_10);
-        int maxWidth = getResources().getDimensionPixelSize(R.dimen.vs_180);
-        float textSize = getResources().getDimension(R.dimen.ts_22);
-        int textColor = getResources().getColor(R.color.color_FFFFFF);
-        for (int i = 0; i < history.size(); i++) {
-            final String word = history.get(i);
-            TextView item = new TextView(this);
-            item.setText(word);
-            item.setSingleLine(true);
-            item.setEllipsize(TextUtils.TruncateAt.END);
-            item.setGravity(Gravity.CENTER);
-            item.setIncludeFontPadding(false);
-            item.setFocusable(true);
-            item.setTextColor(textColor);
-            item.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
-            item.setMaxWidth(maxWidth);
-            item.setMinWidth(getResources().getDimensionPixelSize(R.dimen.vs_80));
-            item.setPadding(paddingH, 0, paddingH, 0);
-            item.setBackgroundResource(R.drawable.shape_user_focus);
-            item.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    startSearch(word);
+        historyWordGrid.post(new Runnable() {
+            @Override
+            public void run() {
+                if (!aggregateSearchMode) return;
+                ArrayList<String> history = Hawk.get(HawkConfig.SEARCH_HISTORY, new ArrayList<String>());
+                historyWordGrid.removeAllViews();
+                int itemHeight = getResources().getDimensionPixelSize(R.dimen.vs_50);
+                int itemMargin = getResources().getDimensionPixelSize(R.dimen.vs_5);
+                int paddingH = getResources().getDimensionPixelSize(R.dimen.vs_10);
+                int minWidth = getResources().getDimensionPixelSize(R.dimen.vs_80);
+                int maxWidth = Math.max(minWidth, (llHistoryWord.getWidth() - itemMargin * 6) / 3);
+                float textSize = getResources().getDimension(R.dimen.ts_22);
+                int textColor = getResources().getColor(R.color.color_FFFFFF);
+                for (int i = 0; i < history.size(); i++) {
+                    final String word = history.get(i);
+                    TextView item = new TextView(SearchActivity.this);
+                    item.setText(word);
+                    item.setSingleLine(true);
+                    item.setEllipsize(TextUtils.TruncateAt.END);
+                    item.setGravity(Gravity.CENTER);
+                    item.setIncludeFontPadding(false);
+                    item.setFocusable(true);
+                    item.setTextColor(textColor);
+                    item.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
+                    item.setMaxWidth(maxWidth);
+                    item.setMinWidth(minWidth);
+                    item.setPadding(paddingH, 0, paddingH, 0);
+                    item.setBackgroundResource(R.drawable.shape_user_focus);
+                    item.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            startSearch(word);
+                        }
+                    });
+                    GridLayout.LayoutParams params = new GridLayout.LayoutParams(
+                            GridLayout.spec(i / 3),
+                            GridLayout.spec(i % 3)
+                    );
+                    params.width = GridLayout.LayoutParams.WRAP_CONTENT;
+                    params.height = itemHeight;
+                    params.setMargins(itemMargin, itemMargin, itemMargin, itemMargin);
+                    historyWordGrid.addView(item, params);
                 }
-            });
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams(
-                    GridLayout.spec(i / 3),
-                    GridLayout.spec(i % 3)
-            );
-            params.width = GridLayout.LayoutParams.WRAP_CONTENT;
-            params.height = itemHeight;
-            params.setMargins(itemMargin, itemMargin, itemMargin, itemMargin);
-            historyWordGrid.addView(item, params);
-        }
+            }
+        });
     }
 
     private void initViewModel() {

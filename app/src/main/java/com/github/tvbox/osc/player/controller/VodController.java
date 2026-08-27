@@ -606,18 +606,7 @@ public class VodController extends BaseController {
             public void onClick(View view) {
                 myHandle.removeCallbacks(myRunnable);
                 myHandle.postDelayed(myRunnable, myHandleSeconds);
-                try {
-                    int scaleType = mPlayerConfig.getInt("sc");
-                    scaleType++;
-                    if (scaleType > 5)
-                        scaleType = 0;
-                    mPlayerConfig.put("sc", scaleType);
-                    updatePlayerCfgView();
-                    listener.updatePlayerCfg();
-                    mControlWrapper.setScreenScaleType(scaleType);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
+                showScaleDialog();
             }
         });
         setOnTvLongClickListener(mPlayerScaleBtn, new OnLongClickListener() {
@@ -627,41 +616,10 @@ public class VodController extends BaseController {
                 myHandle.postDelayed(myRunnable, myHandleSeconds);
                 FastClickCheckUtil.check(view);
                 try {
-                    int scaleType = mPlayerConfig.getInt("sc");
-                    ArrayList<Integer> scales = new ArrayList<>();
-                    for (int i = 0; i <= 5; i++) scales.add(i);
-                    SelectDialog<Integer> dialog = new SelectDialog<>(mActivity);
-                    dialog.setTip("请选择画面尺寸");
-                    dialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<Integer>() {
-                        @Override
-                        public void click(Integer value, int pos) {
-                            try {
-                                dialog.cancel();
-                                mPlayerConfig.put("sc", value);
-                                updatePlayerCfgView();
-                                listener.updatePlayerCfg();
-                                mControlWrapper.setScreenScaleType(value);
-                            } catch (JSONException e) {
-                                e.printStackTrace();
-                            }
-                        }
-
-                        @Override
-                        public String getDisplay(Integer value) {
-                            return PlayerHelper.getScaleName(value);
-                        }
-                    }, new DiffUtil.ItemCallback<Integer>() {
-                        @Override
-                        public boolean areItemsTheSame(@NonNull @NotNull Integer oldItem, @NonNull @NotNull Integer newItem) {
-                            return oldItem.intValue() == newItem.intValue();
-                        }
-
-                        @Override
-                        public boolean areContentsTheSame(@NonNull @NotNull Integer oldItem, @NonNull @NotNull Integer newItem) {
-                            return oldItem.intValue() == newItem.intValue();
-                        }
-                    }, scales, scaleType);
-                    dialog.show();
+                    mPlayerConfig.put("sc", 0);
+                    updatePlayerCfgView();
+                    listener.updatePlayerCfg();
+                    mControlWrapper.setScreenScaleType(0);
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
@@ -673,19 +631,7 @@ public class VodController extends BaseController {
             public void onClick(View view) {
                 myHandle.removeCallbacks(myRunnable);
                 myHandle.postDelayed(myRunnable, myHandleSeconds);
-                try {
-                    float speed = (float) mPlayerConfig.getDouble("sp");
-                    speed += 0.25f;
-                    if (speed > 3)
-                        speed = 0.5f;
-                    mPlayerConfig.put("sp", speed);
-                    updatePlayerCfgView();
-                    listener.updatePlayerCfg();
-                    speed_old = speed;
-                    mControlWrapper.setSpeed(speed);
-                } catch (JSONException e) {
-                    e.printStackTrace();
-                }
+                showSpeedDialog();
             }
         });
 
@@ -696,44 +642,11 @@ public class VodController extends BaseController {
                 myHandle.postDelayed(myRunnable, myHandleSeconds);
                 FastClickCheckUtil.check(view);
                 try {
-                    float speed = (float) mPlayerConfig.getDouble("sp");
-                    ArrayList<Float> speeds = new ArrayList<>();
-                    float[] speedOptions = {0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 3.0f};
-                    for (float value : speedOptions) speeds.add(value);
-                    int defaultPos = speeds.indexOf(speed);
-                    SelectDialog<Float> dialog = new SelectDialog<>(mActivity);
-                    dialog.setTip("请选择播放倍速");
-                    dialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<Float>() {
-                        @Override
-                        public void click(Float value, int pos) {
-                            try {
-                                dialog.cancel();
-                                mPlayerConfig.put("sp", value);
-                                updatePlayerCfgView();
-                                listener.updatePlayerCfg();
-                                speed_old = value;
-                                mControlWrapper.setSpeed(value);
-                            } catch (JSONException e) {
-                                e.printStackTrace();
-                            }
-                        }
-
-                        @Override
-                        public String getDisplay(Float value) {
-                            return value + "x";
-                        }
-                    }, new DiffUtil.ItemCallback<Float>() {
-                        @Override
-                        public boolean areItemsTheSame(@NonNull @NotNull Float oldItem, @NonNull @NotNull Float newItem) {
-                            return oldItem.equals(newItem);
-                        }
-
-                        @Override
-                        public boolean areContentsTheSame(@NonNull @NotNull Float oldItem, @NonNull @NotNull Float newItem) {
-                            return oldItem.equals(newItem);
-                        }
-                    }, speeds, defaultPos < 0 ? 1 : defaultPos);
-                    dialog.show();
+                    mPlayerConfig.put("sp", 1.0f);
+                    updatePlayerCfgView();
+                    listener.updatePlayerCfg();
+                    speed_old = 1.0f;
+                    mControlWrapper.setSpeed(1.0f);
                 } catch (JSONException e) {
                     e.printStackTrace();
                 }
@@ -1049,6 +962,93 @@ public class VodController extends BaseController {
         }
         mScreenDisplay.setNextFocusRightId(R.id.play_next);
         mNextBtn.setNextFocusLeftId(R.id.screen_display);
+    }
+
+    private void showScaleDialog() {
+        try {
+            int scaleType = mPlayerConfig.getInt("sc");
+            ArrayList<Integer> scales = new ArrayList<>();
+            for (int i = 0; i <= 5; i++) scales.add(i);
+            SelectDialog<Integer> dialog = new SelectDialog<>(mActivity);
+            dialog.setTip("请选择画面尺寸");
+            dialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<Integer>() {
+                @Override
+                public void click(Integer value, int pos) {
+                    try {
+                        dialog.cancel();
+                        mPlayerConfig.put("sc", value);
+                        updatePlayerCfgView();
+                        listener.updatePlayerCfg();
+                        mControlWrapper.setScreenScaleType(value);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                @Override
+                public String getDisplay(Integer value) {
+                    return PlayerHelper.getScaleName(value);
+                }
+            }, new DiffUtil.ItemCallback<Integer>() {
+                @Override
+                public boolean areItemsTheSame(@NonNull @NotNull Integer oldItem, @NonNull @NotNull Integer newItem) {
+                    return oldItem.intValue() == newItem.intValue();
+                }
+
+                @Override
+                public boolean areContentsTheSame(@NonNull @NotNull Integer oldItem, @NonNull @NotNull Integer newItem) {
+                    return oldItem.intValue() == newItem.intValue();
+                }
+            }, scales, scaleType);
+            dialog.show();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void showSpeedDialog() {
+        try {
+            float speed = (float) mPlayerConfig.getDouble("sp");
+            ArrayList<Float> speeds = new ArrayList<>();
+            float[] speedOptions = {0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 3.0f};
+            for (float value : speedOptions) speeds.add(value);
+            int defaultPos = speeds.indexOf(speed);
+            SelectDialog<Float> dialog = new SelectDialog<>(mActivity);
+            dialog.setTip("请选择播放倍速");
+            dialog.setAdapter(new SelectDialogAdapter.SelectDialogInterface<Float>() {
+                @Override
+                public void click(Float value, int pos) {
+                    try {
+                        dialog.cancel();
+                        mPlayerConfig.put("sp", value);
+                        updatePlayerCfgView();
+                        listener.updatePlayerCfg();
+                        speed_old = value;
+                        mControlWrapper.setSpeed(value);
+                    } catch (JSONException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                @Override
+                public String getDisplay(Float value) {
+                    return value + "x";
+                }
+            }, new DiffUtil.ItemCallback<Float>() {
+                @Override
+                public boolean areItemsTheSame(@NonNull @NotNull Float oldItem, @NonNull @NotNull Float newItem) {
+                    return oldItem.equals(newItem);
+                }
+
+                @Override
+                public boolean areContentsTheSame(@NonNull @NotNull Float oldItem, @NonNull @NotNull Float newItem) {
+                    return oldItem.equals(newItem);
+                }
+            }, speeds, defaultPos < 0 ? 1 : defaultPos);
+            dialog.show();
+        } catch (JSONException e) {
+            e.printStackTrace();
+        }
     }
 
     private void hideLiveAboutBtn() {
@@ -1571,7 +1571,7 @@ public class VodController extends BaseController {
                 }
             } else if (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
                 if (isInPlayback) {
-                    togglePlay();
+                    if (event.getRepeatCount() == 0) togglePlay();
                     return true;
                 }
             } else if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
