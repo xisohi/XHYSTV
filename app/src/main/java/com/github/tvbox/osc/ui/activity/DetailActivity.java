@@ -92,8 +92,10 @@ import android.graphics.Paint;
 public class DetailActivity extends BaseActivity {
     private static final String STATE_FULL_WINDOWS = "detail_full_windows";
     private static final String DETAIL_FALLBACK_SEARCH_TAG = "detail_fallback_search";
-    private static final int DETAIL_FALLBACK_MAX_SEARCH = 5;
-    private static final long DETAIL_FALLBACK_BATCH_TIMEOUT_MS = 5000L;
+    public static final String EXTRA_DETAIL_FALLBACK_CANDIDATES = "detailFallbackCandidates";
+    private static final int DETAIL_FALLBACK_MAX_SEARCH = 20;
+    private static final long DETAIL_FALLBACK_SEARCH_TIMEOUT_MS = 8000L;
+    private static final long DETAIL_FALLBACK_DETAIL_TIMEOUT_MS = 6000L;
     private LinearLayout llLayout;
     private FragmentContainerView llPlayerFragmentContainer;
     private View llPlayerFragmentContainerBlock;
@@ -837,7 +839,25 @@ public class DetailActivity extends BaseActivity {
         sourceViewModel.detailResult.observe(this, new Observer<AbsXml>() {
             @Override
             public void onChanged(AbsXml absXml) {
+                if (detailFallbackActive && !detailFallbackLoadingCandidate) {
+                    return;
+                }
+                if (absXml != null && !TextUtils.isEmpty(absXml.sourceKey)
+                        && !TextUtils.equals(absXml.sourceKey, sourceKey)
+                        && !("push_fallback".equals(absXml.sourceKey) && "push_agent".equals(sourceKey))) {
+                    return;
+                }
                 if (absXml != null && absXml.movie != null && absXml.movie.videoList != null && absXml.movie.videoList.size() > 0) {
+                    boolean fallbackResult = detailFallbackLoadingCandidate;
+                    if (detailFallbackLoadingCandidate) {
+                        detailFallbackLoadingCandidate = false;
+                        llLayout.removeCallbacks(detailFallbackDetailTimeout);
+                    }
+                    if (fallbackResult) {
+                        SourceBean fallbackSource = ApiConfig.get().getSource(sourceKey);
+                        String fallbackName = fallbackSource == null ? sourceKey : fallbackSource.getName();
+                        Toast.makeText(DetailActivity.this, "站点切换至" + fallbackName, Toast.LENGTH_SHORT).show();
+                    }
                     showSuccess();
                     if(!TextUtils.isEmpty(absXml.msg) && !absXml.msg.equals("数据列表")){
                         resetDetailFallback();
@@ -943,6 +963,13 @@ public class DetailActivity extends BaseActivity {
                         handleNoPlayableDetail();
                     }
                 } else {
+                    if (detailFallbackLoadingCandidate) {
+                        detailFallbackLoadingCandidate = false;
+                        detailFallbackDetailTimedOut = true;
+                        llLayout.removeCallbacks(detailFallbackDetailTimeout);
+                        loadNextDetailFallbackSource();
+                        return;
+                    }
                     handleEmptyDetail(absXml);
                 }
             }
@@ -971,6 +998,10 @@ public class DetailActivity extends BaseActivity {
             vod_name=bundle.getString("title", "");
             vod_picture=bundle.getString("picture", "");
             fromCollect = bundle.getBoolean("collect", false);
+            Object fallbackCandidates = bundle.getSerializable(EXTRA_DETAIL_FALLBACK_CANDIDATES);
+            if (fallbackCandidates instanceof ArrayList) {
+                cacheDetailFallbackCandidates(vod_name, (ArrayList<Movie.Video>) fallbackCandidates);
+            }
             loadDetail(bundle.getString("id", null), bundle.getString("sourceKey", ""));
         }
     }
@@ -990,8 +1021,14 @@ public class DetailActivity extends BaseActivity {
             handleNoPlayableDetail();
             return;
         }
-        showLoading();
-        sourceViewModel.getDetail(sourceKey, vodId);
+        if (!fallback) {
+            showLoading();
+        }
+        if (fallback && detailFallbackActive) {
+            llLayout.removeCallbacks(detailFallbackDetailTimeout);
+            llLayout.postDelayed(detailFallbackDetailTimeout, DETAIL_FALLBACK_DETAIL_TIMEOUT_MS);
+        }
+        sourceViewModel.getDetail(sourceKey, vodId, fallback && detailFallbackActive);
         boolean isVodCollect = RoomDataManger.isVodCollect(sourceKey, vodId);
         if (isVodCollect) {
             tvCollect.setText("取消收藏");
@@ -1040,6 +1077,9 @@ public class DetailActivity extends BaseActivity {
         if (detailFallbackActive) {
             return true;
         }
+        detailFallbackKeepCurrentDetail = mVideo != null && vodInfo != null
+                && vodInfo.seriesMap != null && !vodInfo.seriesMap.isEmpty();
+        llLayout.removeCallbacks(detailFallbackDetailTimeout);
         captureDetailFallbackEpisode();
         if (mVideo != null && !TextUtils.isEmpty(mVideo.name)) {
             vod_name = mVideo.name;
@@ -1054,7 +1094,6 @@ public class DetailActivity extends BaseActivity {
             return true;
         }
         LOG.i("echo-detail fallback " + (manual ? "manual" : "after lines exhausted") + ": " + vod_name);
-        showLoading();
         startDetailFallback();
         return detailFallbackActive;
     }
@@ -1072,19 +1111,24 @@ public class DetailActivity extends BaseActivity {
             }
         }
         if (detailFallbackSourceOrder.isEmpty()) {
-            showDetailEmpty();
+            if (!detailFallbackKeepCurrentDetail) {
+                showDetailEmpty();
+            }
             return;
         }
 
         detailFallbackActive = true;
         detailFallbackSearching = true;
+        detailFallbackSearchCollecting = true;
+        detailFallbackSearchTimedOut = false;
+        detailFallbackDetailTimedOut = false;
+        detailFallbackSearchTimeoutScheduled = false;
         detailFallbackLoadingCandidate = false;
         detailFallbackBatchIndex = 0;
         detailFallbackNextSourceIndex = 0;
         detailFallbackToken = "detail_fallback_" + (++detailFallbackRequestIndex);
         detailFallbackTriedKeys.add(getDetailFallbackKey(sourceKey, vodId));
         LOG.i("echo-detail fallback search: " + detailFallbackTitle + ", sources=" + detailFallbackSourceOrder.size());
-        llLayout.removeCallbacks(detailFallbackTimeout);
         scheduleDetailFallbackSearch();
     }
 
@@ -1157,7 +1201,7 @@ public class DetailActivity extends BaseActivity {
     }
 
     private void onDetailFallbackSearchResult(AbsXml data) {
-        if (!detailFallbackActive || !detailFallbackSearching || data == null || !detailFallbackBatchToken.equals(data.searchToken)) {
+        if (!detailFallbackActive || !detailFallbackSearchCollecting || data == null || !detailFallbackBatchToken.equals(data.searchToken)) {
             return;
         }
         detailFallbackPendingSources.remove(data.sourceKey);
@@ -1173,12 +1217,17 @@ public class DetailActivity extends BaseActivity {
                 }
             }
         }
-        if (!detailFallbackLoadingCandidate && !detailFallbackCandidates.isEmpty()) {
+        if (!detailFallbackLoadingCandidate && !detailFallbackCandidates.isEmpty()
+                && (!detailFallbackSearchTimedOut || detailFallbackDetailTimedOut)) {
             LOG.i("echo-detail fallback candidates: " + detailFallbackCandidates.size());
             loadNextDetailFallbackSource();
         }
         if (!detailFallbackLoadingCandidate) {
-            scheduleDetailFallbackSearch();
+            if (detailFallbackSearching) {
+                scheduleDetailFallbackSearch();
+            } else if (detailFallbackPendingSources.isEmpty()) {
+                finishDetailFallbackSearchCollection();
+            }
         }
     }
 
@@ -1214,25 +1263,28 @@ public class DetailActivity extends BaseActivity {
                 }
             });
         }
-        llLayout.removeCallbacks(detailFallbackTimeout);
-        llLayout.postDelayed(detailFallbackTimeout, DETAIL_FALLBACK_BATCH_TIMEOUT_MS);
+        if (!detailFallbackSearchTimeoutScheduled) {
+            detailFallbackSearchTimeoutScheduled = true;
+            llLayout.postDelayed(detailFallbackTimeout, DETAIL_FALLBACK_SEARCH_TIMEOUT_MS);
+        }
     }
 
     private void finishDetailFallbackSearchOnTimeout() {
-        if (!detailFallbackActive || !detailFallbackSearching || detailFallbackPendingSources.isEmpty()) {
+        if (!detailFallbackActive || !detailFallbackSearching) {
             return;
         }
-        LOG.i("echo-detail fallback batch timeout: " + detailFallbackBatchToken);
-        detailFallbackPendingSources.clear();
-        detailFallbackBatchToken = "";
-        stopDetailFallbackSearchExecutor();
-        OkGo.getInstance().cancelTag(DETAIL_FALLBACK_SEARCH_TAG);
+        detailFallbackSearchTimeoutScheduled = false;
+        LOG.i("echo-detail fallback search timeout: " + detailFallbackBatchToken);
+        // Keep the current 20 searches alive so late results can be used by the next fallback source.
+        detailFallbackSearching = false;
+        detailFallbackSearchTimedOut = true;
+        detailFallbackNextSourceIndex = detailFallbackSourceOrder.size();
         if (!detailFallbackLoadingCandidate) {
+            LOG.i("echo-detail fallback candidates: " + detailFallbackCandidates.size());
             if (!detailFallbackCandidates.isEmpty()) {
-                LOG.i("echo-detail fallback candidates: " + detailFallbackCandidates.size());
                 loadNextDetailFallbackSource();
             } else {
-                scheduleDetailFallbackSearch();
+                showDetailFallbackEmptyIfNeeded();
             }
         }
     }
@@ -1246,22 +1298,61 @@ public class DetailActivity extends BaseActivity {
             }
             LOG.i("echo-detail fallback source: " + video.sourceKey + ", id=" + video.id);
             detailFallbackLoadingCandidate = true;
+            detailFallbackDetailTimedOut = false;
             addDetailFallbackUsedSource(video.sourceKey);
             vod_name = video.name == null ? "" : video.name;
             vod_picture = video.pic == null ? "" : video.pic;
             loadDetail(video.id, video.sourceKey, true);
             return;
         }
-        if (detailFallbackSearching) {
+        if (detailFallbackSearching || detailFallbackSearchCollecting) {
             if (detailFallbackPendingSources.isEmpty()) {
-                scheduleDetailFallbackSearch();
-            } else {
-                showLoading();
+                if (detailFallbackSearching) {
+                    scheduleDetailFallbackSearch();
+                } else {
+                    finishDetailFallbackSearchCollection();
+                }
             }
             return;
         }
+        finishDetailFallbackWithoutResult();
+    }
+
+    private void finishDetailFallbackSearchCollection() {
+        if (!detailFallbackSearchCollecting) {
+            return;
+        }
+        detailFallbackSearchCollecting = false;
+        stopDetailFallbackSearchExecutor();
+        OkGo.getInstance().cancelTag(DETAIL_FALLBACK_SEARCH_TAG);
+        if (!detailFallbackLoadingCandidate) {
+            finishDetailFallbackWithoutResult();
+        }
+    }
+
+    private void showDetailFallbackEmptyIfNeeded() {
+        if (!detailFallbackKeepCurrentDetail) {
+            showDetailEmpty();
+        }
+    }
+
+    private void finishDetailFallbackWithoutResult() {
+        boolean keepCurrentDetail = detailFallbackKeepCurrentDetail;
         resetDetailFallback();
-        showDetailEmpty();
+        if (!keepCurrentDetail) {
+            showDetailEmpty();
+        }
+    }
+
+    private void finishDetailFallbackDetailOnTimeout() {
+        if (!detailFallbackActive || !detailFallbackLoadingCandidate) {
+            return;
+        }
+        LOG.i("echo-detail fallback detail timeout: " + sourceKey);
+        detailFallbackLoadingCandidate = false;
+        detailFallbackDetailTimedOut = true;
+        OkGo.getInstance().cancelTag("detail");
+        loadNextDetailFallbackSource();
     }
 
     private String getDetailFallbackKey(String key, String id) {
@@ -1274,7 +1365,9 @@ public class DetailActivity extends BaseActivity {
             return false;
         }
         for (Movie.Video video : cachedCandidates) {
-            if (video == null || TextUtils.equals(video.sourceKey, detailFallbackExcludedSourceKey) || isDetailFallbackSourceUsed(video.sourceKey)) {
+            SourceBean source = video == null ? null : ApiConfig.get().getSource(video.sourceKey);
+            if (video == null || source == null || !source.isChangeable()
+                    || TextUtils.equals(video.sourceKey, detailFallbackExcludedSourceKey) || isDetailFallbackSourceUsed(video.sourceKey)) {
                 continue;
             }
             String candidateKey = getDetailFallbackKey(video.sourceKey, video.id);
@@ -1289,9 +1382,37 @@ public class DetailActivity extends BaseActivity {
         detailFallbackLoadingCandidate = false;
         detailFallbackTriedKeys.add(getDetailFallbackKey(sourceKey, vodId));
         LOG.i("echo-detail fallback cache: " + detailFallbackTitle + ", candidates=" + detailFallbackCandidates.size());
-        showLoading();
         loadNextDetailFallbackSource();
         return true;
+    }
+
+    private void cacheDetailFallbackCandidates(String title, List<Movie.Video> candidates) {
+        title = title == null ? "" : title.trim();
+        if (TextUtils.isEmpty(title) || candidates == null || candidates.isEmpty()) {
+            return;
+        }
+        List<Movie.Video> cachedCandidates = detailFallbackCache.get(title);
+        if (cachedCandidates == null) {
+            cachedCandidates = new ArrayList<>();
+            detailFallbackCache.put(title, cachedCandidates);
+        }
+        for (Movie.Video video : candidates) {
+            if (cachedCandidates.size() >= DETAIL_FALLBACK_MAX_SEARCH || video == null
+                    || TextUtils.isEmpty(video.id) || !TextUtils.equals(title, video.name == null ? "" : video.name.trim())) {
+                continue;
+            }
+            String candidateKey = getDetailFallbackKey(video.sourceKey, video.id);
+            boolean exists = false;
+            for (Movie.Video cachedVideo : cachedCandidates) {
+                if (candidateKey.equals(getDetailFallbackKey(cachedVideo.sourceKey, cachedVideo.id))) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                cachedCandidates.add(video);
+            }
+        }
     }
 
     private void cacheDetailFallbackCandidate(Movie.Video video) {
@@ -1335,6 +1456,11 @@ public class DetailActivity extends BaseActivity {
     private void resetDetailFallback() {
         detailFallbackActive = false;
         detailFallbackSearching = false;
+        detailFallbackSearchCollecting = false;
+        detailFallbackSearchTimedOut = false;
+        detailFallbackDetailTimedOut = false;
+        detailFallbackSearchTimeoutScheduled = false;
+        detailFallbackKeepCurrentDetail = false;
         detailFallbackLoadingCandidate = false;
         detailFallbackBatchIndex = 0;
         detailFallbackNextSourceIndex = 0;
@@ -1351,6 +1477,7 @@ public class DetailActivity extends BaseActivity {
         detailFallbackEpisodeIndex = -1;
         if (llLayout != null) {
             llLayout.removeCallbacks(detailFallbackTimeout);
+            llLayout.removeCallbacks(detailFallbackDetailTimeout);
         }
         stopDetailFallbackSearchExecutor();
         OkGo.getInstance().cancelTag(DETAIL_FALLBACK_SEARCH_TAG);
@@ -1434,6 +1561,11 @@ public class DetailActivity extends BaseActivity {
     private int detailFallbackEpisodeIndex = -1;
     private boolean detailFallbackActive;
     private boolean detailFallbackSearching;
+    private boolean detailFallbackSearchCollecting;
+    private boolean detailFallbackSearchTimedOut;
+    private boolean detailFallbackDetailTimedOut;
+    private boolean detailFallbackSearchTimeoutScheduled;
+    private boolean detailFallbackKeepCurrentDetail;
     private boolean detailFallbackLoadingCandidate;
     private int detailFallbackRequestIndex;
     private int detailFallbackBatchIndex;
@@ -1446,6 +1578,12 @@ public class DetailActivity extends BaseActivity {
         @Override
         public void run() {
             finishDetailFallbackSearchOnTimeout();
+        }
+    };
+    private final Runnable detailFallbackDetailTimeout = new Runnable() {
+        @Override
+        public void run() {
+            finishDetailFallbackDetailOnTimeout();
         }
     };
 

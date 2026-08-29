@@ -1738,7 +1738,7 @@ public class PlayFragment extends BaseLazyFragment {
             requireActivity().runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    Toast.makeText(mContext, "自动切换线路: " + flagToSwitch, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(mContext, "线路切换至" + flagToSwitch, Toast.LENGTH_SHORT).show();
                 }
             });
         }

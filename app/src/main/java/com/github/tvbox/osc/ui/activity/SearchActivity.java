@@ -225,6 +225,7 @@ public class SearchActivity extends BaseActivity {
                     bundle.putString("sourceKey", video.sourceKey);
                     bundle.putString("title", video.name);
                     bundle.putString("picture", video.pic);
+                    putDetailFallbackCandidates(bundle, video);
                     jumpActivity(DetailActivity.class, bundle);
                 }
             }
@@ -722,6 +723,7 @@ public class SearchActivity extends BaseActivity {
     private final AtomicInteger totalSearchCount = new AtomicInteger(0);
     private String currentSearchToken = "";
     private boolean searchPaused = false;
+    private final List<Movie.Video> detailFallbackSearchResults = new ArrayList<>();
 
     private void searchResult() {
         try {
@@ -744,6 +746,7 @@ public class SearchActivity extends BaseActivity {
             startedSearchKeys.clear();
             releasedSearchKeys.clear();
             highMatchVods.clear();
+            detailFallbackSearchResults.clear();
             showHighMatchResults = false;
             totalSearchCount.set(0);
             currentSearchToken = String.valueOf(searchTokenSeq.incrementAndGet());
@@ -826,6 +829,7 @@ public class SearchActivity extends BaseActivity {
                 if (isHighMatchSearchResult(video)) {
                     highMatchVods.add(video);
                     highData.add(video);
+                    detailFallbackSearchResults.add(video);
                 }
                 if (matchSearchResult(video.name, searchTitle)) {
                     exactData.add(video);
@@ -845,6 +849,31 @@ public class SearchActivity extends BaseActivity {
         }
 
         finishSearchIfDone();
+    }
+
+    private void putDetailFallbackCandidates(Bundle bundle, Movie.Video selectedVideo) {
+        if (bundle == null || selectedVideo == null || TextUtils.isEmpty(selectedVideo.name)) {
+            return;
+        }
+        String title = selectedVideo.name.trim();
+        ArrayList<Movie.Video> candidates = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
+        for (Movie.Video video : detailFallbackSearchResults) {
+            if (video == null || TextUtils.isEmpty(video.id)
+                    || !TextUtils.equals(title, video.name == null ? "" : video.name.trim())) {
+                continue;
+            }
+            String key = (video.sourceKey == null ? "" : video.sourceKey) + "|" + video.id;
+            if (keys.add(key)) {
+                candidates.add(video);
+                if (candidates.size() >= 20) {
+                    break;
+                }
+            }
+        }
+        if (!candidates.isEmpty()) {
+            bundle.putSerializable(DetailActivity.EXTRA_DETAIL_FALLBACK_CANDIDATES, candidates);
+        }
     }
 
     private void scheduleSearchAdvance(final String sourceKey, final String searchToken) {
