@@ -1826,7 +1826,7 @@ public class LivePlayActivity extends BaseActivity {
         if(mVideoView!=null){
             if(liveChannelHeader()!=null)LOG.i("echo-"+liveChannelHeader().toString());
             boolean reusePlayer = canReusePlayer(previousLivePlayerType);
-            boolean keepExoFrame = reusePlayer && previousLivePlayerType == 3;
+            boolean keepExoFrame = reusePlayer && previousLivePlayerType == 2;
             if (showPreviousFrame && !keepExoFrame) {
                 showSwitchChannelSnapshot();
             } else {
