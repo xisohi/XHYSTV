@@ -113,6 +113,8 @@ public class VodController extends BaseController {
                     }
                     case 1002: { // 显示底部菜单
                         updateDanmuSearchUiBtn();
+                        hidePauseRoot();
+                        mPlayTitle.setVisibility(GONE);
                         mBottomRoot.setVisibility(VISIBLE);
                         mTopRoot1.setVisibility(VISIBLE);
                         mTopRoot2.setVisibility(VISIBLE);
@@ -122,7 +124,6 @@ public class VodController extends BaseController {
                         }else {
                             net_play_speed.setVisibility(GONE);
                         }
-                        mPlayTitle.setVisibility(GONE);
                         boolean isPortrait = getResources().getConfiguration().orientation == Configuration.ORIENTATION_PORTRAIT;
                         backBtn.setVisibility(ScreenUtils.isTv(context) || isPortrait ? INVISIBLE : VISIBLE);
                         showLockView();
@@ -132,6 +133,13 @@ public class VodController extends BaseController {
                         mBottomRoot.setVisibility(GONE);
                         mTopRoot1.setVisibility(GONE);
                         mPlayLoadNetSpeedRightTop.setVisibility(GONE);
+                        if (videoPlayState == VideoView.STATE_PAUSED) {
+                            showPauseRoot();
+                            mPlayTitle.setVisibility(VISIBLE);
+                        } else {
+                            hidePauseRoot();
+                            mPlayTitle.setVisibility(GONE);
+                        }
                         if(Hawk.get(HawkConfig.SCREEN_DISPLAY,GONE)==GONE){
                             mPlayPauseTime.setVisibility(GONE);
                         }else {
@@ -901,9 +909,9 @@ public class VodController extends BaseController {
             @Override
             public boolean onLongClick(View view) {
                 FastClickCheckUtil.check(view);
-                listener.closeDanmu();
+                boolean opened = listener.toggleDanmu();
                 hideBottom();
-                Toast.makeText(getContext(), "弹幕已临时关闭", Toast.LENGTH_SHORT).show();
+                Toast.makeText(getContext(), opened ? "弹幕已开启" : "弹幕已临时关闭", Toast.LENGTH_SHORT).show();
                 return true;
             }
         });
@@ -1279,7 +1287,7 @@ public class VodController extends BaseController {
 
         void showDanmuSetting();
 
-        void closeDanmu();
+        boolean toggleDanmu();
 
         void searchDanmuUi(boolean longClick);
 
@@ -1501,6 +1509,10 @@ public class VodController extends BaseController {
                 mTopRoot1.setVisibility(GONE);
 //                mTopRoot2.setVisibility(GONE);
                 mPlayLoadNetSpeedRightTop.setVisibility(GONE);
+                if (isBottomVisible()) {
+                    hideBottom();
+                }
+                showPauseRoot();
                 mPlayTitle.setVisibility(VISIBLE);
                 break;
             case VideoView.STATE_ERROR:

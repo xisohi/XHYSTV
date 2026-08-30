@@ -347,8 +347,8 @@ public class PlayFragment extends BaseLazyFragment {
             }
 
             @Override
-            public void closeDanmu() {
-                if (danmuLoadController != null) danmuLoadController.close();
+            public boolean toggleDanmu() {
+                return danmuLoadController != null && danmuLoadController.toggle();
             }
 
             @Override
