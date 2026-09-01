@@ -307,8 +307,10 @@ public class PlayFragment extends BaseLazyFragment {
                     }
                 }
                 if (switchingPlayback) {
-                    if (playState == VideoView.STATE_ERROR
-                            || playState == VideoView.STATE_PLAYBACK_COMPLETED) {
+                    if (playState == VideoView.STATE_PLAYBACK_COMPLETED) {
+                        LOG.i("echo-music keep session while resolving next episode");
+                        return;
+                    } else if (playState == VideoView.STATE_ERROR) {
                         switchingPlayback = false;
                         audioPlayback = false;
                     } else if (isStartedPlayState(playState)) {
@@ -927,6 +929,7 @@ public class PlayFragment extends BaseLazyFragment {
             return;
         }
         if (!autoRetry()) {
+            stopMusicSessionForFailedPlayback();
             if (!isAdded()) return;
             requireActivity().runOnUiThread(new Runnable() {
                 @Override
@@ -940,6 +943,12 @@ public class PlayFragment extends BaseLazyFragment {
                 }
             });
         }
+    }
+
+    private void stopMusicSessionForFailedPlayback() {
+        switchingPlayback = false;
+        audioPlayback = false;
+        MusicPlaybackService.stop(getContext(), this);
     }
 
     void playUrl(String url, HashMap<String, String> headers) {
@@ -2240,7 +2249,10 @@ public class PlayFragment extends BaseLazyFragment {
         LOG.i("echo-resolvePlayUrl timeout, try next line");
         if (sourceViewModel != null) sourceViewModel.cancelPlayRequest();
         stopParse();
-        if (!tryNextLineIfEnabled()) setTip("获取播放地址超时", false, true);
+        if (!tryNextLineIfEnabled()) {
+            stopMusicSessionForFailedPlayback();
+            setTip("获取播放地址超时", false, true);
+        }
     }
 
     void handleResolvePlayUrlFailed(String err) {
@@ -2249,6 +2261,7 @@ public class PlayFragment extends BaseLazyFragment {
         stopParse();
         if (tryNextLineIfEnabled()) return;
         cancelPlayTimeout();
+        stopMusicSessionForFailedPlayback();
         setTip(err, false, true);
     }
 
@@ -2263,10 +2276,16 @@ public class PlayFragment extends BaseLazyFragment {
         LOG.i("echo-switchLinePlay timeout, try next line");
         stopParse();
         if (hasAutoSwitchedPlayer) {
-            if (!tryNextLineIfEnabled()) setTip("播放超时", false, true);
+            if (!tryNextLineIfEnabled()) {
+                stopMusicSessionForFailedPlayback();
+                setTip("播放超时", false, true);
+            }
             return;
         }
-        if (!autoRetry()) setTip("播放超时", false, true);
+        if (!autoRetry()) {
+            stopMusicSessionForFailedPlayback();
+            setTip("播放超时", false, true);
+        }
     }
 
     void stopParse() {
