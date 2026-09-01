@@ -2092,6 +2092,10 @@ public class DetailActivity extends BaseActivity {
         EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_SUBTITLE_SIZE_CHANGE, subtitleTextSize));
     }
 
+    public PlayFragment getPlayFragment() {
+        return playFragment;
+    }
+
     private void setTvPlayUrl(String url)
     {
         setTextShow(tvPlayUrl, "播放地址：", url);
