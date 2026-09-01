@@ -225,6 +225,7 @@ public class SearchActivity extends BaseActivity {
                     bundle.putString("sourceKey", video.sourceKey);
                     bundle.putString("title", video.name);
                     bundle.putString("picture", video.pic);
+                    putDetailFallbackCandidates(bundle, video);
                     jumpActivity(DetailActivity.class, bundle);
                 }
             }
@@ -462,44 +463,51 @@ public class SearchActivity extends BaseActivity {
     }
 
     private void refreshSearchHistoryWords() {
-        ArrayList<String> history = Hawk.get(HawkConfig.SEARCH_HISTORY, new ArrayList<String>());
-        historyWordGrid.removeAllViews();
-        int itemHeight = getResources().getDimensionPixelSize(R.dimen.vs_50);
-        int itemMargin = getResources().getDimensionPixelSize(R.dimen.vs_5);
-        int paddingH = getResources().getDimensionPixelSize(R.dimen.vs_10);
-        int maxWidth = getResources().getDimensionPixelSize(R.dimen.vs_220);
-        float textSize = getResources().getDimension(R.dimen.ts_22);
-        int textColor = getResources().getColor(R.color.color_FFFFFF);
-        for (int i = 0; i < history.size(); i++) {
-            final String word = history.get(i);
-            TextView item = new TextView(this);
-            item.setText(word);
-            item.setSingleLine(true);
-            item.setEllipsize(TextUtils.TruncateAt.END);
-            item.setGravity(Gravity.CENTER);
-            item.setIncludeFontPadding(false);
-            item.setFocusable(true);
-            item.setTextColor(textColor);
-            item.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
-            item.setMaxWidth(maxWidth);
-            item.setMinWidth(getResources().getDimensionPixelSize(R.dimen.vs_80));
-            item.setPadding(paddingH, 0, paddingH, 0);
-            item.setBackgroundResource(R.drawable.shape_user_focus);
-            item.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    startSearch(word);
+        historyWordGrid.post(new Runnable() {
+            @Override
+            public void run() {
+                if (!aggregateSearchMode) return;
+                ArrayList<String> history = Hawk.get(HawkConfig.SEARCH_HISTORY, new ArrayList<String>());
+                historyWordGrid.removeAllViews();
+                int itemHeight = getResources().getDimensionPixelSize(R.dimen.vs_50);
+                int itemMargin = getResources().getDimensionPixelSize(R.dimen.vs_5);
+                int paddingH = getResources().getDimensionPixelSize(R.dimen.vs_10);
+                int minWidth = getResources().getDimensionPixelSize(R.dimen.vs_80);
+                int maxWidth = Math.max(minWidth, (llHistoryWord.getWidth() - itemMargin * 6) / 3);
+                float textSize = getResources().getDimension(R.dimen.ts_22);
+                int textColor = getResources().getColor(R.color.color_FFFFFF);
+                for (int i = 0; i < history.size(); i++) {
+                    final String word = history.get(i);
+                    TextView item = new TextView(SearchActivity.this);
+                    item.setText(word);
+                    item.setSingleLine(true);
+                    item.setEllipsize(TextUtils.TruncateAt.END);
+                    item.setGravity(Gravity.CENTER);
+                    item.setIncludeFontPadding(false);
+                    item.setFocusable(true);
+                    item.setTextColor(textColor);
+                    item.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSize);
+                    item.setMaxWidth(maxWidth);
+                    item.setMinWidth(minWidth);
+                    item.setPadding(paddingH, 0, paddingH, 0);
+                    item.setBackgroundResource(R.drawable.shape_user_focus);
+                    item.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            startSearch(word);
+                        }
+                    });
+                    GridLayout.LayoutParams params = new GridLayout.LayoutParams(
+                            GridLayout.spec(i / 3),
+                            GridLayout.spec(i % 3)
+                    );
+                    params.width = GridLayout.LayoutParams.WRAP_CONTENT;
+                    params.height = itemHeight;
+                    params.setMargins(itemMargin, itemMargin, itemMargin, itemMargin);
+                    historyWordGrid.addView(item, params);
                 }
-            });
-            GridLayout.LayoutParams params = new GridLayout.LayoutParams(
-                    GridLayout.spec(i / 3),
-                    GridLayout.spec(i % 3)
-            );
-            params.width = GridLayout.LayoutParams.WRAP_CONTENT;
-            params.height = itemHeight;
-            params.setMargins(itemMargin, itemMargin, itemMargin, itemMargin);
-            historyWordGrid.addView(item, params);
-        }
+            }
+        });
     }
 
     private void initViewModel() {
@@ -715,6 +723,7 @@ public class SearchActivity extends BaseActivity {
     private final AtomicInteger totalSearchCount = new AtomicInteger(0);
     private String currentSearchToken = "";
     private boolean searchPaused = false;
+    private final List<Movie.Video> detailFallbackSearchResults = new ArrayList<>();
 
     private void searchResult() {
         try {
@@ -737,6 +746,7 @@ public class SearchActivity extends BaseActivity {
             startedSearchKeys.clear();
             releasedSearchKeys.clear();
             highMatchVods.clear();
+            detailFallbackSearchResults.clear();
             showHighMatchResults = false;
             totalSearchCount.set(0);
             currentSearchToken = String.valueOf(searchTokenSeq.incrementAndGet());
@@ -819,6 +829,7 @@ public class SearchActivity extends BaseActivity {
                 if (isHighMatchSearchResult(video)) {
                     highMatchVods.add(video);
                     highData.add(video);
+                    detailFallbackSearchResults.add(video);
                 }
                 if (matchSearchResult(video.name, searchTitle)) {
                     exactData.add(video);
@@ -838,6 +849,31 @@ public class SearchActivity extends BaseActivity {
         }
 
         finishSearchIfDone();
+    }
+
+    private void putDetailFallbackCandidates(Bundle bundle, Movie.Video selectedVideo) {
+        if (bundle == null || selectedVideo == null || TextUtils.isEmpty(selectedVideo.name)) {
+            return;
+        }
+        String title = selectedVideo.name.trim();
+        ArrayList<Movie.Video> candidates = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
+        for (Movie.Video video : detailFallbackSearchResults) {
+            if (video == null || TextUtils.isEmpty(video.id)
+                    || !TextUtils.equals(title, video.name == null ? "" : video.name.trim())) {
+                continue;
+            }
+            String key = (video.sourceKey == null ? "" : video.sourceKey) + "|" + video.id;
+            if (keys.add(key)) {
+                candidates.add(video);
+                if (candidates.size() >= 20) {
+                    break;
+                }
+            }
+        }
+        if (!candidates.isEmpty()) {
+            bundle.putSerializable(DetailActivity.EXTRA_DETAIL_FALLBACK_CANDIDATES, candidates);
+        }
     }
 
     private void scheduleSearchAdvance(final String sourceKey, final String searchToken) {

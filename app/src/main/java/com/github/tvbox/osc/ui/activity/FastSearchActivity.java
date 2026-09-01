@@ -195,6 +195,7 @@ public class FastSearchActivity extends BaseActivity {
                     bundle.putString("sourceKey", video.sourceKey);
                     bundle.putString("title", video.name);
                     bundle.putString("picture", video.pic);
+                    putDetailFallbackCandidates(bundle, video);
                     jumpActivity(DetailActivity.class, bundle);
                 }
             }
@@ -231,6 +232,7 @@ public class FastSearchActivity extends BaseActivity {
                     bundle.putString("sourceKey", video.sourceKey);
                     bundle.putString("title", video.name);
                     bundle.putString("picture", video.pic);
+                    putDetailFallbackCandidates(bundle, video);
                     jumpActivity(DetailActivity.class, bundle);
                 }
             }
@@ -505,6 +507,7 @@ public class FastSearchActivity extends BaseActivity {
     private final AtomicInteger timedOutSearchCount = new AtomicInteger(0);
     private String currentSearchToken = "";
     private boolean searchPaused = false;
+    private final List<Movie.Video> detailFallbackSearchResults = new ArrayList<>();
 
     private void searchResult() {
         try {
@@ -532,6 +535,7 @@ public class FastSearchActivity extends BaseActivity {
             searchPaused = false;
             totalSearchCount.set(0);
             timedOutSearchCount.set(0);
+            detailFallbackSearchResults.clear();
             updateSearchStatus();
         }
         List<SourceBean> searchRequestList = new ArrayList<>();
@@ -658,6 +662,7 @@ public class FastSearchActivity extends BaseActivity {
         if (absXml != null && absXml.movie != null && absXml.movie.videoList != null && absXml.movie.videoList.size() > 0) {
             for (Movie.Video video : absXml.movie.videoList) {
                 if (!matchSearchResult(video.name, searchTitle)) continue;
+                detailFallbackSearchResults.add(video);
                 if (!resultVods.containsKey(video.sourceKey)) {
                     resultVods.put(video.sourceKey, new ArrayList<Movie.Video>());
                 }
@@ -685,6 +690,31 @@ public class FastSearchActivity extends BaseActivity {
         }
 
         finishSearchIfDone();
+    }
+
+    private void putDetailFallbackCandidates(Bundle bundle, Movie.Video selectedVideo) {
+        if (bundle == null || selectedVideo == null || TextUtils.isEmpty(selectedVideo.name)) {
+            return;
+        }
+        String title = selectedVideo.name.trim();
+        ArrayList<Movie.Video> candidates = new ArrayList<>();
+        Set<String> keys = new HashSet<>();
+        for (Movie.Video video : detailFallbackSearchResults) {
+            if (video == null || TextUtils.isEmpty(video.id)
+                    || !TextUtils.equals(title, video.name == null ? "" : video.name.trim())) {
+                continue;
+            }
+            String key = (video.sourceKey == null ? "" : video.sourceKey) + "|" + video.id;
+            if (keys.add(key)) {
+                candidates.add(video);
+                if (candidates.size() >= 20) {
+                    break;
+                }
+            }
+        }
+        if (!candidates.isEmpty()) {
+            bundle.putSerializable(DetailActivity.EXTRA_DETAIL_FALLBACK_CANDIDATES, candidates);
+        }
     }
 
     private void scheduleSearchAdvance(final String sourceKey, final String searchToken) {

@@ -40,6 +40,7 @@ import androidx.lifecycle.ViewModelProvider;
 import androidx.recyclerview.widget.DiffUtil;
 
 import com.github.catvod.crawler.Spider;
+import com.google.gson.JsonObject;
 import com.github.tvbox.osc.R;
 import com.github.tvbox.osc.api.ApiConfig;
 import com.github.tvbox.osc.api.DanmakuApi;
@@ -55,6 +56,7 @@ import com.github.tvbox.osc.event.RefreshEvent;
 import com.github.tvbox.osc.player.ExoPlayer;
 import com.github.tvbox.osc.player.IjkMediaPlayer;
 import com.github.tvbox.osc.player.MyVideoView;
+import com.github.tvbox.osc.player.MusicPlaybackService;
 import com.github.tvbox.osc.player.TrackInfo;
 import com.github.tvbox.osc.player.TrackInfoBean;
 import com.github.tvbox.osc.player.controller.VodController;
@@ -144,9 +146,18 @@ public class PlayFragment extends BaseLazyFragment {
     private ProgressBar mPlayLoading;
     private VodController mController;
     private SourceViewModel sourceViewModel;
+    private Observer<JSONObject> playResultObserver;
     private JSONObject qualityResult;
     private Handler mHandler;
     private boolean exitingPreview = false;
+    private boolean audioPlayback;
+    private boolean switchingPlayback;
+    private boolean reusePlayerOnSwitch;
+    private boolean releasePlayerOnSwitch;
+    private boolean previewMode;
+    private String playLyric;
+    private String lyricCacheKey;
+    private String playArtwork;
     private DanmakuView mDanmuView;
     private DanmuLoadController danmuLoadController;
     private final List<Cue> exoCues = new ArrayList<>();
@@ -263,6 +274,7 @@ public class PlayFragment extends BaseLazyFragment {
         mPlayLoading = findViewById(R.id.play_loading);
         mPlayLoadErr = findViewById(R.id.play_load_error);
         mController = new VodController(requireContext());
+        mController.mLyricView.setTextSize(previewMode ? 16 : 24);
         mController.setCanChangePosition(true);
         mController.setEnableInNormal(true);
         mController.setGestureEnabled(true);
@@ -285,10 +297,31 @@ public class PlayFragment extends BaseLazyFragment {
         mVideoView.addOnStateChangeListener(new VideoView.SimpleOnStateChangeListener() {
             @Override
             public void onPlayStateChanged(int playState) {
+                if (playState == VideoView.STATE_PLAYING && mVideoView != null) {
+                    mVideoView.showVideoFrame();
+                }
                 if (webPlayUrl != null && isStartedPlayState(playState)) {
                     markPlaybackStarted();
-                    hideTipOnUiThread();
+                    if (mVideoView == null || !mVideoView.isVideoFrameCleared()) {
+                        hideTipOnUiThread();
+                    }
                 }
+                if (switchingPlayback) {
+                    if (playState == VideoView.STATE_PLAYBACK_COMPLETED) {
+                        LOG.i("echo-music keep session while resolving next episode");
+                        return;
+                    } else if (playState == VideoView.STATE_ERROR) {
+                        switchingPlayback = false;
+                        audioPlayback = false;
+                    } else if (isStartedPlayState(playState)) {
+                        Boolean audioOnly = getAudioOnlyPlayback();
+                        if (audioOnly != null) {
+                            switchingPlayback = false;
+                            audioPlayback = audioOnly;
+                        }
+                    }
+                }
+                if (!switchingPlayback) updateMusicSession();
                 startDanmuIfReady();
             }
         });
@@ -317,8 +350,8 @@ public class PlayFragment extends BaseLazyFragment {
             }
 
             @Override
-            public void closeDanmu() {
-                if (danmuLoadController != null) danmuLoadController.close();
+            public boolean toggleDanmu() {
+                return danmuLoadController != null && danmuLoadController.toggle();
             }
 
             @Override
@@ -896,6 +929,7 @@ public class PlayFragment extends BaseLazyFragment {
             return;
         }
         if (!autoRetry()) {
+            stopMusicSessionForFailedPlayback();
             if (!isAdded()) return;
             requireActivity().runOnUiThread(new Runnable() {
                 @Override
@@ -909,6 +943,12 @@ public class PlayFragment extends BaseLazyFragment {
                 }
             });
         }
+    }
+
+    private void stopMusicSessionForFailedPlayback() {
+        switchingPlayback = false;
+        audioPlayback = false;
+        MusicPlaybackService.stop(getContext(), this);
     }
 
     void playUrl(String url, HashMap<String, String> headers) {
@@ -945,12 +985,12 @@ public class PlayFragment extends BaseLazyFragment {
             public void run() {
                 stopParse();
                 if (mVideoView != null) {
-                    mVideoView.release();
                     if (finalUrl != null) {
                         String url = finalUrl;
                         try {
                             int playerType = mVodPlayerCfg.getInt("pl");
                             if (playerType >= 10) {
+                                mVideoView.release();
                                 VodInfo.VodSeries vs = mVodInfo.seriesMap.get(mVodInfo.playFlag).get(mVodInfo.playIndex);
                                 String playTitle = mVodInfo.name + " " + vs.name;
                                 setTip("调用外部播放器" + PlayerHelper.getPlayerName(playerType) + "进行播放", true, false);
@@ -963,8 +1003,9 @@ public class PlayFragment extends BaseLazyFragment {
                         } catch (JSONException e) {
                             e.printStackTrace();
                         }
-                        hideTip();
                         playTimeoutBasePosition = getSavedProgress(progressKey);
+                        boolean forceExoPlayer = url.startsWith("data:application/dash+xml;base64,")
+                                || url.contains(".mpd") || url.contains("type=mpd");
                         if (url.startsWith("data:application/dash+xml;base64,")) {
                             PlayerHelper.updateCfg(mVideoView, mVodPlayerCfg, 2);
                             App.getInstance().setDashData(url.split("base64,")[1]);
@@ -975,6 +1016,11 @@ public class PlayFragment extends BaseLazyFragment {
                             PlayerHelper.updateCfg(mVideoView, mVodPlayerCfg);
                         }
                         mController.hidePauseRoot();
+                        boolean reusePlayer = !forceExoPlayer && mVideoView.getMediaPlayer() != null;
+                        if (!reusePlayer) hideTip();
+                        if (!reusePlayer && mVideoView.getMediaPlayer() != null) {
+                            mVideoView.release();
+                        }
                         mVideoView.setProgressKey(progressKey);
                         if (headers != null) {
                             mVideoView.setUrl(url, headers);
@@ -982,7 +1028,12 @@ public class PlayFragment extends BaseLazyFragment {
                             mVideoView.setUrl(url);
                         }
                         startSwitchLinePlayTimeout();
-                        mVideoView.start();
+                        if (reusePlayer) {
+                            mVideoView.skipPositionWhenPlay((int) playTimeoutBasePosition);
+                            mVideoView.replay(false);
+                        } else {
+                            mVideoView.start();
+                        }
                         mController.resetSpeed();
                     }
                 }
@@ -1004,6 +1055,13 @@ public class PlayFragment extends BaseLazyFragment {
     private void initSubtitleView() {
         TrackInfo trackInfo = null;
         AbstractPlayer mediaPlayer = mVideoView.getMediaPlayer();
+        mController.mLyricView.setTextSize(previewMode ? 16 : 24);
+        mController.mLyricView.setVisibility(View.GONE);
+        mController.mLyricView.reset();
+        mController.mLyricView.bindToMediaPlayer(mediaPlayer);
+        mController.mLyricView.setMergeSameTime(true);
+        mController.mLyricView.setLyricMode(true);
+        mController.mLyricView.setPlaySubtitleCacheKey(lyricCacheKey);
         mController.mSubtitleView.hasInternal = false;
         mController.mSubtitleView.isInternal = false;
         hideExoInternalSubtitle();
@@ -1043,6 +1101,10 @@ public class PlayFragment extends BaseLazyFragment {
                 applyExoSubtitleSettings();
             }
             exoPlayer.loadDefaultTrack(progressKey);
+        }
+        if (!TextUtils.isEmpty(playLyric)) {
+            mController.mLyricView.setSubtitlePath(playLyric);
+            mController.mLyricView.setVisibility(View.VISIBLE);
         }
         mController.mSubtitleView.bindToMediaPlayer(mVideoView.getMediaPlayer());
         mController.mSubtitleView.setPlaySubtitleCacheKey(subtitleCacheKey);
@@ -1084,9 +1146,42 @@ public class PlayFragment extends BaseLazyFragment {
         }
     }
 
+    private String getSubtitleUrl(JSONObject object) {
+        if (object == null) return "";
+        String url = object.optString("url", "");
+        if (!TextUtils.isEmpty(url) && !FileUtils.hasExtension(url)) {
+            String format = object.optString("format", "");
+            String name = object.optString("name", "字幕");
+            String ext = ".srt";
+            if ("text/x-ssa".equals(format)) {
+                ext = ".ass";
+            } else if ("text/vtt".equals(format)) {
+                ext = ".vtt";
+            } else if ("text/lrc".equals(format)) {
+                ext = ".lrc";
+            }
+            String filename = name + (name.toLowerCase(Locale.ROOT).endsWith(ext) ? "" : ext);
+            url += "#" + mController.encodeUrl(filename);
+        }
+        return url;
+    }
+
+    private boolean isLyricSubtitle(String name) {
+        if (TextUtils.isEmpty(name)) return false;
+        String value = name.toLowerCase(Locale.ROOT);
+        return value.contains("lyric") || value.contains("lrc") || name.contains("歌词");
+    }
+
+    private void clearLyricView() {
+        if (mController == null || mController.mLyricView == null) return;
+        mController.mLyricView.setVisibility(View.GONE);
+        mController.mLyricView.destroy();
+        mController.mLyricView.setText("");
+    }
+
     private void initViewModel() {
         sourceViewModel = new ViewModelProvider(this).get(SourceViewModel.class);
-        sourceViewModel.playResult.observe(this, new Observer<JSONObject>() {
+        playResultObserver = new Observer<JSONObject>() {
             @Override
             public void onChanged(JSONObject info) {
                 if (info == null) publishQuality(null);
@@ -1096,55 +1191,57 @@ public class PlayFragment extends BaseLazyFragment {
                             LOG.i("echo-ignore stale play result");
                             return;
                         }
+                        mHandler.removeMessages(MSG_RESOLVE_PLAY_URL_TIMEOUT);
                         publishQuality(info);
                         webPlayUrl = null;
                         progressKey = info.optString("proKey", null);
                         boolean parse = info.optString("parse", "1").equals("1");
                         boolean jx = info.optString("jx", "0").equals("1");
-                        playSubtitle = info.optString("subt", /*"https://dash.akamaized.net/akamai/test/caption_test/ElephantsDream/ElephantsDream_en.vtt"*/"");
-                        if(playSubtitle.isEmpty() && info.has("subs")) {
-                            try {
-                                JSONObject obj =info.getJSONArray("subs").optJSONObject(0);
-                                String url = obj.optString("url", "");
-                                if (!TextUtils.isEmpty(url) && !FileUtils.hasExtension(url)) {
-                                    String format = obj.optString("format", "");
-                                    String name = obj.optString("name", "字幕");
-                                    String ext = ".srt";
-                                    switch (format) {
-                                        case "text/x-ssa":
-                                            ext = ".ass";
-                                            break;
-                                        case "text/vtt":
-                                            ext = ".vtt";
-                                            break;
-                                        case "application/x-subrip":
-                                            ext = ".srt";
-                                            break;
-                                        case "text/lrc":
-                                            ext = ".lrc";
-                                            break;
-                                    }
-                                    String filename = name + (name.toLowerCase().endsWith(ext) ? "" : ext);
-                                    url += "#" + mController.encodeUrl(filename);
+                        playSubtitle = info.optString("subt", "");
+                        playLyric = info.optString("lyric", "");
+                        lyricCacheKey = info.optString("lyricKey", null);
+                        if (TextUtils.isEmpty(lyricCacheKey) && !TextUtils.isEmpty(progressKey)) {
+                            lyricCacheKey = progressKey + "-lyric";
+                        }
+                        JSONArray lyrics = info.optJSONArray("lyrics");
+                        if (lyrics != null && lyrics.length() > 0) {
+                            playLyric = getSubtitleUrl(lyrics.optJSONObject(0));
+                        }
+                        JSONArray subtitles = info.optJSONArray("subs");
+                        if (subtitles != null) {
+                            for (int i = 0; i < subtitles.length(); i++) {
+                                JSONObject obj = subtitles.optJSONObject(i);
+                                if (obj == null) continue;
+                                String url = getSubtitleUrl(obj);
+                                String name = obj.optString("name", "");
+                                if (isLyricSubtitle(name)) {
+                                    if (TextUtils.isEmpty(playLyric)) playLyric = url;
+                                } else if (TextUtils.isEmpty(playSubtitle)) {
+                                    playSubtitle = url;
                                 }
-                                playSubtitle = url;
-                            } catch (Throwable th) {
                             }
                         }
                         subtitleCacheKey = info.optString("subtKey", null);
                         String playUrl = info.optString("playUrl", "");
+                        String flag = info.optString("flag");
+                        Object rawUrl = info.opt("url");
+                        String url = rawUrl instanceof JSONArray ? rawUrl.toString() : String.valueOf(rawUrl);
+                        if(url.startsWith("[")){
+                            url=mController.firstUrlByArray(url);
+                        }
+                        String artwork = info.optString("artwork", "");
+                        if (TextUtils.isEmpty(artwork) && !TextUtils.isEmpty(playLyric) && mVodInfo != null) {
+                            artwork = mVodInfo.pic;
+                        }
+                        playArtwork = artwork;
+                        mVideoView.setArtwork(playArtwork);
                         String msg = info.optString("msg", "");
                         if (!TextUtils.isEmpty(msg)) {
                             handleResolvePlayUrlFailed(msg);
                             return;
                         }
-                        String flag = info.optString("flag");
-                        String url = info.getString("url");
                         String danmaku = info.optString("danmaku", "").trim();
                         final String danmuProgressKey = progressKey;
-                        if(url.startsWith("[")){
-                            url=mController.firstUrlByArray(url);
-                        }
                         HashMap<String, String> headers = null;
                         webUserAgent = null;
                         webHeaderMap = null;
@@ -1179,7 +1276,8 @@ public class PlayFragment extends BaseLazyFragment {
                     handleResolvePlayUrlFailed("获取播放信息错误");
                 }
             }
-        });
+        };
+        sourceViewModel.playResult.observeForever(playResultObserver);
     }
 
     public boolean selectQuality(int position) {
@@ -1279,6 +1377,9 @@ public class PlayFragment extends BaseLazyFragment {
             if (!mVodPlayerCfg.has("pl")) {
                 mVodPlayerCfg.put("pl", (sourceBean.getPlayerType() == -1) ? (int)Hawk.get(HawkConfig.PLAY_TYPE, 2) : sourceBean.getPlayerType());
             }
+            if (mVodPlayerCfg.optInt("pl", 2) == 0) {
+                mVodPlayerCfg.put("pl", 2);
+            }
             mVodPlayerCfg.put("pr", Hawk.get(HawkConfig.PLAY_RENDER, 0));
             if (!mVodPlayerCfg.has("ijk")) {
                 mVodPlayerCfg.put("ijk", Hawk.get(HawkConfig.IJK_CODEC, "硬解码"));
@@ -1317,6 +1418,77 @@ public class PlayFragment extends BaseLazyFragment {
         this.exitingPreview = exitingPreview;
     }
 
+    private boolean hasAudioOnlyPlayback() {
+        return Boolean.TRUE.equals(getAudioOnlyPlayback());
+    }
+
+    private Boolean getAudioOnlyPlayback() {
+        if (mVideoView == null) return null;
+        try {
+            AbstractPlayer mediaPlayer = mVideoView.getMediaPlayer();
+            TrackInfo trackInfo = null;
+            if (mediaPlayer instanceof IjkMediaPlayer) {
+                trackInfo = ((IjkMediaPlayer) mediaPlayer).getTrackInfo();
+            } else if (mediaPlayer instanceof ExoPlayer) {
+                trackInfo = ((ExoPlayer) mediaPlayer).getTrackInfo();
+            }
+            if (trackInfo == null) return null;
+            return !trackInfo.getAudio().isEmpty() && trackInfo.getVideo().isEmpty();
+        } catch (Throwable ignored) {
+            return null;
+        }
+    }
+
+    private void updateMusicSession() {
+        if (!MusicPlaybackService.isSupported(getContext())) return;
+        if (switchingPlayback) return;
+        Boolean audioOnly = getAudioOnlyPlayback();
+        if (audioOnly != null) audioPlayback = audioOnly;
+        if (audioPlayback && TextUtils.isEmpty(playArtwork) && mVodInfo != null && !TextUtils.isEmpty(mVodInfo.pic)) {
+            playArtwork = mVodInfo.pic;
+            mVideoView.setArtwork(playArtwork);
+        }
+        if (mVodInfo == null || mVideoView == null || !audioPlayback
+                || mVideoView.getCurrentPlayState() == VideoView.STATE_ERROR
+                || mVideoView.getCurrentPlayState() == VideoView.STATE_PLAYBACK_COMPLETED) {
+            MusicPlaybackService.stop(getContext(), this);
+            audioPlayback = false;
+            return;
+        }
+        VodInfo.VodSeries currentSeries = getCurrentSeries(mVodInfo.playFlag, mVodInfo.playIndex);
+        String episode = currentSeries == null || TextUtils.isEmpty(currentSeries.name) ? "" : currentSeries.name;
+        MusicPlaybackService.update(getContext(), this,
+                TextUtils.isEmpty(mVodInfo.name) ? "TVBox" : mVodInfo.name,
+                episode, mVodInfo.pic, mVideoView.getCurrentPosition(),
+                mVideoView.getDuration(), mVideoView.isPlaying());
+    }
+
+    public void resumeFromMediaSession() {
+        if (mVideoView != null) {
+            mVideoView.start();
+            updateMusicSession();
+        }
+    }
+
+    public void pauseFromMediaSession() {
+        if (mVideoView != null) {
+            mVideoView.pause();
+            updateMusicSession();
+        }
+    }
+
+    public void stopFromMediaSession() {
+        if (mVideoView != null) mVideoView.pause();
+        MusicPlaybackService.stop(getContext(), this);
+    }
+
+    public void seekFromMediaSession(long position) {
+        if (mVideoView != null) {
+            mVideoView.seekTo(position);
+            updateMusicSession();
+        }
+    }
+
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (event != null) {
             if (mController.onKeyEvent(event)) {
@@ -1347,7 +1519,7 @@ public class PlayFragment extends BaseLazyFragment {
     @Override
     public void onPause() {
         super.onPause();
-        if (mVideoView != null && !exitingPreview) {
+        if (mVideoView != null && !exitingPreview && !hasAudioOnlyPlayback()) {
             mVideoView.pause();
         }
     }
@@ -1377,6 +1549,13 @@ public class PlayFragment extends BaseLazyFragment {
 
     @Override
     public void onDestroyView() {
+        audioPlayback = false;
+        switchingPlayback = false;
+        MusicPlaybackService.stop(getContext(), this);
+        if (sourceViewModel != null && playResultObserver != null) {
+            sourceViewModel.playResult.removeObserver(playResultObserver);
+            playResultObserver = null;
+        }
         super.onDestroyView();
         ApiConfig.get().setCurrentPlaySourceKey("");
         cancelPlayTimeout();
@@ -1399,7 +1578,7 @@ public class PlayFragment extends BaseLazyFragment {
     private String sourceKey;
     private SourceBean sourceBean;
 
-    private void playNext(boolean isProgress) {
+    public void playNext(boolean isProgress) {
         triedLineFlags.clear();
         boolean hasNext;
         if (mVodInfo == null || mVodInfo.seriesMap.get(mVodInfo.playFlag) == null) {
@@ -1413,10 +1592,11 @@ public class PlayFragment extends BaseLazyFragment {
         }else {
             mVodInfo.playIndex++;
         }
+        reusePlayerOnSwitch = true;
         play(false);
     }
 
-    private void playPrevious() {
+    public void playPrevious() {
         triedLineFlags.clear();
         boolean hasPre = true;
         if (mVodInfo == null || mVodInfo.seriesMap.get(mVodInfo.playFlag) == null) {
@@ -1429,6 +1609,7 @@ public class PlayFragment extends BaseLazyFragment {
             return;
         }
         mVodInfo.playIndex--;
+        reusePlayerOnSwitch = true;
         play(false);
     }
 
@@ -1443,6 +1624,7 @@ public class PlayFragment extends BaseLazyFragment {
                 if (position < 0 || position >= episodes.size() || position == mVodInfo.playIndex) return;
                 triedLineFlags.clear();
                 mVodInfo.playIndex = position;
+                reusePlayerOnSwitch = true;
                 play(false);
             }
         });
@@ -1462,6 +1644,7 @@ public class PlayFragment extends BaseLazyFragment {
 
     private void restoreAutoSwitchedPlayer() {
         if (autoSwitchedPlayerType < 0) return;
+        releasePlayerOnSwitch = true;
         try {
             LOG.i("echo-autoRetry restore player: " + mVodPlayerCfg.optInt("pl", -1) + " -> " + autoSwitchedPlayerType);
             mVodPlayerCfg.put("pl", autoSwitchedPlayerType);
@@ -1568,7 +1751,7 @@ public class PlayFragment extends BaseLazyFragment {
             requireActivity().runOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    Toast.makeText(mContext, "自动切换线路: " + flagToSwitch, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(mContext, "线路切换至" + flagToSwitch, Toast.LENGTH_SHORT).show();
                 }
             });
         }
@@ -1580,6 +1763,7 @@ public class PlayFragment extends BaseLazyFragment {
         hasAutoSwitchedPlayer = false;
         inheritProgressKey = preProgressKey;
         inheritProgress = preProgress;
+        reusePlayerOnSwitch = true;
         play(false);
         return true;
     }
@@ -1732,10 +1916,22 @@ public class PlayFragment extends BaseLazyFragment {
 
     public void play(boolean reset) {
         if(mVodInfo==null)return;
+        boolean reusePlayer = reusePlayerOnSwitch && !releasePlayerOnSwitch;
+        reusePlayerOnSwitch = false;
+        releasePlayerOnSwitch = false;
+        switchingPlayback = true;
+        audioPlayback = false;
+        playArtwork = "";
         exitingPreview = false;
         VodInfo.VodSeries vs = mVodInfo.seriesMap.get(mVodInfo.playFlag).get(mVodInfo.playIndex);
         EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_REFRESH, mVodInfo));
-        setTip("正在获取播放信息", true, false);
+        if (reusePlayer) {
+            mPlayLoadTip.setVisibility(View.GONE);
+            mPlayLoadErr.setVisibility(View.GONE);
+            mPlayLoading.setVisibility(View.VISIBLE);
+        } else {
+            setTip("正在获取播放信息", true, false);
+        }
         String playTitleInfo = mVodInfo.name + " " + vs.name;
         mController.setTitle(playTitleInfo);
 
@@ -1749,7 +1945,22 @@ public class PlayFragment extends BaseLazyFragment {
         hasAutoSwitchedPlayer=false;
         mController.stopOther();
         resetDanmuState();
-        if(mVideoView!=null) mVideoView.release();
+        clearLyricView();
+        mVideoView.clearArtwork();
+        if(mVideoView!=null) {
+            if (reusePlayer) {
+                long previousPosition = mVideoView.getCurrentPosition();
+                if (previousPosition > 0 && !TextUtils.isEmpty(progressKey)) {
+                    CacheManager.save(MD5.string2MD5(progressKey), previousPosition);
+                }
+                AbstractPlayer mediaPlayer = mVideoView.getMediaPlayer();
+                if (mediaPlayer != null) {
+                    mVideoView.clearVideoFrame();
+                }
+            } else {
+                mVideoView.release();
+            }
+        }
         ImgUtil.clearMemoryCache();
         subtitleCacheKey = mVodInfo.sourceKey + "-" + mVodInfo.id + "-" + mVodInfo.playFlag + "-" + mVodInfo.playIndex+ "-" + vs.name + "-subt";
         progressKey = mVodInfo.sourceKey + mVodInfo.id + mVodInfo.playFlag + mVodInfo.playIndex + vs.name;
@@ -1992,8 +2203,10 @@ public class PlayFragment extends BaseLazyFragment {
     }
 
     public void setPreviewMode(boolean previewMode) {
+        this.previewMode = previewMode;
         if (mController != null) {
             mController.setPreviewMode(previewMode);
+            mController.mLyricView.setTextSize(previewMode ? 16 : 24);
         }
     }
 
@@ -2036,7 +2249,10 @@ public class PlayFragment extends BaseLazyFragment {
         LOG.i("echo-resolvePlayUrl timeout, try next line");
         if (sourceViewModel != null) sourceViewModel.cancelPlayRequest();
         stopParse();
-        if (!tryNextLineIfEnabled()) setTip("获取播放地址超时", false, true);
+        if (!tryNextLineIfEnabled()) {
+            stopMusicSessionForFailedPlayback();
+            setTip("获取播放地址超时", false, true);
+        }
     }
 
     void handleResolvePlayUrlFailed(String err) {
@@ -2045,6 +2261,7 @@ public class PlayFragment extends BaseLazyFragment {
         stopParse();
         if (tryNextLineIfEnabled()) return;
         cancelPlayTimeout();
+        stopMusicSessionForFailedPlayback();
         setTip(err, false, true);
     }
 
@@ -2059,10 +2276,16 @@ public class PlayFragment extends BaseLazyFragment {
         LOG.i("echo-switchLinePlay timeout, try next line");
         stopParse();
         if (hasAutoSwitchedPlayer) {
-            if (!tryNextLineIfEnabled()) setTip("播放超时", false, true);
+            if (!tryNextLineIfEnabled()) {
+                stopMusicSessionForFailedPlayback();
+                setTip("播放超时", false, true);
+            }
             return;
         }
-        if (!autoRetry()) setTip("播放超时", false, true);
+        if (!autoRetry()) {
+            stopMusicSessionForFailedPlayback();
+            setTip("播放超时", false, true);
+        }
     }
 
     void stopParse() {
@@ -2323,6 +2546,41 @@ public class PlayFragment extends BaseLazyFragment {
     }
     public MyVideoView getPlayer() {
         return mVideoView;
+    }
+
+    public JsonObject getMediaInfo() {
+        JsonObject info = new JsonObject();
+        if (mVideoView == null) return info;
+        try {
+            int playState = mVideoView.getCurrentPlayState();
+            int state;
+            if (mVideoView.isPlaying()) state = 3;
+            else if (playState == VideoView.STATE_BUFFERING) state = 1;
+            else if (playState == VideoView.STATE_PAUSED || playState == VideoView.STATE_PREPARED
+                    || playState == VideoView.STATE_BUFFERED) state = 2;
+            else state = -1;
+            info.addProperty("state", state);
+            info.addProperty("speed", mVideoView.getSpeed());
+            info.addProperty("duration", mVideoView.getDuration());
+            info.addProperty("position", mVideoView.getCurrentPosition());
+            info.addProperty("url", webPlayUrl == null ? "" : webPlayUrl);
+            String title = "";
+            String artist = "";
+            String artwork = "";
+            if (mVodInfo != null) {
+                title = TextUtils.isEmpty(mVodInfo.name) ? "" : mVodInfo.name;
+                VodInfo.VodSeries series = getCurrentSeries(mVodInfo.playFlag, mVodInfo.playIndex);
+                if (series != null && !TextUtils.isEmpty(series.name)) artist = series.name;
+                artwork = TextUtils.isEmpty(mVodInfo.pic) ? "" : mVodInfo.pic;
+            }
+            if (!TextUtils.isEmpty(playArtwork)) artwork = playArtwork;
+            info.addProperty("title", title);
+            info.addProperty("artist", artist);
+            info.addProperty("artwork", artwork);
+        } catch (Throwable th) {
+            LOG.e("echo-media getMediaInfo error: " + th.getMessage());
+        }
+        return info;
     }
 
     // webview
