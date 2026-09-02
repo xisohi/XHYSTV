@@ -98,4 +98,5 @@ lint/tmp/
 
 *.hprof
 *.md
+.temp/
 output-metadata.json

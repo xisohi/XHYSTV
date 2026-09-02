@@ -668,6 +668,10 @@ public class SourceViewModel extends ViewModel {
     }
     // detailContent
     public void getDetail(String sourceKey, String urlid) {
+        getDetail(sourceKey, urlid, false);
+    }
+
+    public void getDetail(String sourceKey, String urlid, boolean fallback) {
         if (urlid.startsWith("push://") && ApiConfig.get().getSource(PUSH_AGENT) != null) {
             String pushUrl = urlid.substring(7);
             if (pushUrl.startsWith("b64:")) {
@@ -704,6 +708,7 @@ public class SourceViewModel extends ViewModel {
                             List<String> ids = new ArrayList<>();
                             ids.add(id);
                             try {
+//                                LOG.i("echo--getDetail--id: " + id);
                                 return sp.detailContent(ids);
                             } catch (Exception e) {
                                 LOG.i("echo--getDetail--error: " + e.getMessage());
@@ -714,7 +719,7 @@ public class SourceViewModel extends ViewModel {
 
                     String json = null;
                     try {
-                        json = future.get(30, TimeUnit.SECONDS);
+                        json = future.get(fallback ? 6 : 30, TimeUnit.SECONDS);
 //                        LOG.i("echo--getDetail--result:" + json);
                     } catch (TimeoutException e) {
                         LOG.i("echo--getDetail--timeout");
@@ -729,7 +734,7 @@ public class SourceViewModel extends ViewModel {
             });
         } else if (type == 0 || type == 1|| type == 4) {
             String extend=sourceBean.getExt();
-            extend=getFixUrl(extend);
+            extend=fallback ? getFixUrl(extend, 6) : getFixUrl(extend);
 
             GetRequest<String> request = OkGo.<String>get(sourceBean.getApi())
                     .tag("detail")
@@ -769,7 +774,9 @@ public class SourceViewModel extends ViewModel {
                         }
                     });
         } else {
-            detailResult.postValue(null);
+            AbsXml data = new AbsXml();
+            data.sourceKey = sourceKey;
+            detailResult.postValue(data);
         }
     }
 
@@ -1038,6 +1045,7 @@ public class SourceViewModel extends ViewModel {
                             Spider sp = ApiConfig.get().getCSP(sourceBean);
                             if (TextUtils.isEmpty(requestUrl)) return "";
                             try {
+                                LOG.i("echo--getPlay--id: " + requestUrl);
                                 return sp.playerContent(playFlag, requestUrl, ApiConfig.get().getVipParseFlags());
                             } catch (Exception e) {
                                 LOG.i("echo--getPlay--error: " + e.getMessage());
@@ -1346,6 +1354,10 @@ public class SourceViewModel extends ViewModel {
     private static final ConcurrentHashMap<String, String> extendCache = new ConcurrentHashMap<>();
 
     private String getFixUrl(final String extend) {
+        return getFixUrl(extend, 20);
+    }
+
+    private String getFixUrl(final String extend, final long timeoutSeconds) {
         if (TextUtils.isEmpty(extend)) return "";
         if(!extend.startsWith("http"))return extend;
         final String key = MD5.string2MD5(extend);
@@ -1376,7 +1388,7 @@ public class SourceViewModel extends ViewModel {
         });
 
         try {
-            return future.get(20, TimeUnit.SECONDS);
+            return future.get(timeoutSeconds, TimeUnit.SECONDS);
         } catch (TimeoutException te) {
             te.printStackTrace();
             future.cancel(true);
@@ -1743,7 +1755,7 @@ public class SourceViewModel extends ViewModel {
                 	data = checkPush(data);
                     checkThunder(data,0);
                 }else {
-                    result.postValue(data);
+                    postSearchResult(result, data);
                 }
             }
             return data;
@@ -1751,7 +1763,13 @@ public class SourceViewModel extends ViewModel {
             if (searchResult == result || quickSearchResult == result || detailFallbackSearchResult == result) {
                 postEmptySearchResult(result, sourceKey, searchToken);
             } else if (result != null) {
-                result.postValue(null);
+                if (result == detailResult) {
+                    AbsXml data = new AbsXml();
+                    data.sourceKey = sourceKey;
+                    result.postValue(data);
+                } else {
+                    result.postValue(null);
+                }
             }
             return null;
         }
@@ -1793,7 +1811,7 @@ public class SourceViewModel extends ViewModel {
                 	data = checkPush(data);
                     checkThunder(data,0);
                 }else {
-                    result.postValue(data);
+                    postSearchResult(result, data);
                 }
             }
             return data;
@@ -1801,7 +1819,13 @@ public class SourceViewModel extends ViewModel {
             if (searchResult == result || quickSearchResult == result || detailFallbackSearchResult == result) {
                 postEmptySearchResult(result, sourceKey, searchToken);
             } else if (result != null) {
-                result.postValue(null);
+                if (result == detailResult) {
+                    AbsXml data = new AbsXml();
+                    data.sourceKey = sourceKey;
+                    result.postValue(data);
+                } else {
+                    result.postValue(null);
+                }
             }
             return null;
         }
@@ -1850,6 +1874,19 @@ public class SourceViewModel extends ViewModel {
         } else if (quickSearchResult == result) {
             EventBus.getDefault().post(new RefreshEvent(RefreshEvent.TYPE_QUICK_SEARCH_RESULT, data));
         } else if (result != null) {
+            postSearchResult(result, data);
+        }
+    }
+
+    private void postSearchResult(final MutableLiveData<AbsXml> result, final AbsXml data) {
+        if (result == detailFallbackSearchResult) {
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    result.setValue(data);
+                }
+            });
+        } else {
             result.postValue(data);
         }
     }

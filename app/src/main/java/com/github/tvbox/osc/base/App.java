@@ -81,6 +81,8 @@ public class App extends MultiDexApplication {
         //播放器：0 系统 1 ijk 2 exo 10 MXPlayer
         if (!Hawk.contains(HawkConfig.PLAY_TYPE)) {
             Hawk.put(HawkConfig.PLAY_TYPE, 2);
+        } else if (Hawk.get(HawkConfig.PLAY_TYPE, 2) == 0) {
+            Hawk.put(HawkConfig.PLAY_TYPE, 2);
         }
         //首页推荐：0 豆瓣热播 1 数据源推荐 2 观看历史
         if (!Hawk.contains(HawkConfig.HOME_REC)) {
