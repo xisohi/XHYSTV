@@ -3,6 +3,9 @@
     <cache-path
         name="vod_cache_path"
         path="." />
+    <files-path
+        name="app_files_path"
+        path="." />
     <external-path
         name="vod_external_path"
         path="." />

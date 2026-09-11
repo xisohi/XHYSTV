@@ -207,8 +207,8 @@ public class ModelSettingFragment extends BaseLazyFragment {
         });
         findViewById(R.id.Version).setOnClickListener(v -> {
             FastClickCheckUtil.check(v);
-            // 强制检查更新
-            Updater.create().force().start(mActivity);
+            // 检查更新
+            Updater.create().start(mActivity);
         });
         findViewById(R.id.llWp).setOnClickListener(new View.OnClickListener() {
             @Override

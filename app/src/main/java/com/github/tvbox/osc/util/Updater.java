@@ -1,6 +1,7 @@
 package com.github.tvbox.osc.util;
 
 import android.Manifest;
+import android.content.Context;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.ContentValues;
@@ -47,7 +48,6 @@ public class Updater {
     private AlertDialog dialog;
     private ProgressDialog progressDialog;
     private int retryCount = 0;
-    private boolean forceCheck = false;
     private boolean silentMode = false;
     private boolean isInstallTriggered = false;
     private volatile boolean isCancelled = false;
@@ -62,11 +62,6 @@ public class Updater {
 
     private Updater() {
         this.mainHandler = new Handler(Looper.getMainLooper());
-    }
-
-    public Updater force() {
-        this.forceCheck = true;
-        return this;
     }
 
     public Updater silent() {
@@ -587,6 +582,25 @@ public class Updater {
         return activity.getFilesDir();
     }
 
+    /**
+     * 启动时清理残留的更新 APK，避免占用存储空间
+     */
+    public static void cleanupStaleApk(Context context) {
+        if (context == null) return;
+        try {
+            File[] dirs = {context.getFilesDir(), context.getCacheDir()};
+            for (File dir : dirs) {
+                if (dir == null) continue;
+                File file = new File(dir, "update.apk");
+                if (file.exists() && file.delete()) {
+                    Log.i(TAG, "清理残留 update.apk: " + file.getPath());
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "清理残留 APK 失败: " + e.getMessage());
+        }
+    }
+
     private void installApk(File file) {
         if (!isActivityAlive()) {
             showToast("页面已销毁，请手动重新更新");
@@ -613,12 +627,6 @@ public class Updater {
                 return;
             }
             activity.startActivity(intent);
-            // 2分钟后删除APK，给用户充足时间完成安装
-            mainHandler.postDelayed(() -> {
-                if (file.exists() && file.delete()) {
-                    Log.d(TAG, "APK 已删除，释放空间");
-                }
-            }, 120000);
         } catch (Exception e) {
             Log.e(TAG, "安装失败: " + e.getMessage(), e);
             fallbackInstall(file);
@@ -634,8 +642,15 @@ public class Updater {
                 file.setReadable(true, false);
             }
             Intent intent = new Intent(Intent.ACTION_VIEW);
-            intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive");
             intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                Uri uri = FileProvider.getUriForFile(activity,
+                        BuildConfig.APPLICATION_ID + ".fileprovider", file);
+                intent.setDataAndType(uri, "application/vnd.android.package-archive");
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            } else {
+                intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive");
+            }
             if (activity.getPackageManager().queryIntentActivities(intent, 0).isEmpty()) {
                 showToast("系统无法安装 APK，请前往设置开启\"未知来源\"后手动安装");
                 isInstallTriggered = false;
@@ -734,6 +749,7 @@ public class Updater {
     }
 
     private void showToast(String msg) {
+        if (silentMode) return;
         if (isActivityAlive()) {
             Toast.makeText(activity, msg, Toast.LENGTH_LONG).show();
         }
