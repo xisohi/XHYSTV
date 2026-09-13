@@ -1719,7 +1719,7 @@ public class VodController extends BaseController {
 
     private final Handler mmHandler = new Handler();
     private Runnable mLongPressRunnable;
-    private static final long LONG_PRESS_DELAY = 800;
+    private static final long LONG_PRESS_DELAY = ViewConfiguration.getLongPressTimeout();
     private boolean isLongPressTriggered = false;
 
     private boolean setMinPlayTimeChange(String typeEt,boolean increase){
