@@ -799,7 +799,8 @@
         android:id="@+id/play_speed_3_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="center"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="@dimen/vs_80"
         android:background="@drawable/bg_speed_indicator"
         android:visibility="gone"
         android:padding="8dp">
