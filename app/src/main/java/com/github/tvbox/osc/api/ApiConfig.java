@@ -1497,7 +1497,7 @@ public class ApiConfig {
                         warmedSearchSpiderKeys.add(warmKey);
                     }
                     try {
-                        LOG.i("echo-warm-spider load:" + warmKey);
+//                        LOG.i("echo-warm-spider load:" + warmKey);
                         getCSP(source);
                     } catch (Throwable th) {
                         LOG.e("echo-warm-search-spider-error " + source.getKey() + ":" + th.getMessage());

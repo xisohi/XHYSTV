@@ -286,7 +286,7 @@ public class VodController extends BaseController {
             int[] mVideoSizes = mControlWrapper.getVideoSize();
             String width = Integer.toString(mVideoSizes[0]);
             String height = Integer.toString(mVideoSizes[1]);
-            mVideoSize.setText("[ " + width + " X " + height +" ]");
+            mVideoSize.setText(width + " X " + height);
 
             mHandler.postDelayed(this, 1000);
         }
@@ -1574,6 +1574,19 @@ public class VodController extends BaseController {
             myHandle.postDelayed(myRunnable, myHandleSeconds);
             return super.dispatchKeyEvent(event);
         }
+        if (action == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0
+                && videoPlayState == VideoView.STATE_ERROR
+                && (keyCode == KeyEvent.KEYCODE_DPAD_UP
+                || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER
+                || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE)) {
+            showBottom();
+            myHandle.postDelayed(myRunnable, myHandleSeconds);
+            return true;
+        }
         boolean isInPlayback = isInPlaybackState();
         if (action == KeyEvent.ACTION_DOWN) {
             if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
@@ -1706,7 +1719,7 @@ public class VodController extends BaseController {
 
     private final Handler mmHandler = new Handler();
     private Runnable mLongPressRunnable;
-    private static final long LONG_PRESS_DELAY = 800;
+    private static final long LONG_PRESS_DELAY = ViewConfiguration.getLongPressTimeout();
     private boolean isLongPressTriggered = false;
 
     private boolean setMinPlayTimeChange(String typeEt,boolean increase){

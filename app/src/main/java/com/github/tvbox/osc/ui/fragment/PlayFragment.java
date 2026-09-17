@@ -14,6 +14,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.text.TextUtils;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.ConsoleMessage;
@@ -274,6 +275,14 @@ public class PlayFragment extends BaseLazyFragment {
         mPlayLoading = findViewById(R.id.play_loading);
         mPlayLoadErr = findViewById(R.id.play_load_error);
         mController = new VodController(requireContext());
+        View.OnTouchListener passThroughTouch = new View.OnTouchListener() {
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                return mController != null && mController.onTouchEvent(event);
+            }
+        };
+        mPlayLoadTip.setOnTouchListener(passThroughTouch);
+        mPlayLoadErr.setOnTouchListener(passThroughTouch);
         mController.mLyricView.setTextSize(previewMode ? 16 : 24);
         mController.setCanChangePosition(true);
         mController.setEnableInNormal(true);
@@ -297,14 +306,9 @@ public class PlayFragment extends BaseLazyFragment {
         mVideoView.addOnStateChangeListener(new VideoView.SimpleOnStateChangeListener() {
             @Override
             public void onPlayStateChanged(int playState) {
-                if (playState == VideoView.STATE_PLAYING && mVideoView != null) {
-                    mVideoView.showVideoFrame();
-                }
                 if (webPlayUrl != null && isStartedPlayState(playState)) {
                     markPlaybackStarted();
-                    if (mVideoView == null || !mVideoView.isVideoFrameCleared()) {
-                        hideTipOnUiThread();
-                    }
+                    hideTipOnUiThread();
                 }
                 if (switchingPlayback) {
                     if (playState == VideoView.STATE_PLAYBACK_COMPLETED) {
@@ -1617,13 +1621,31 @@ public class PlayFragment extends BaseLazyFragment {
         if (!isAdded() || mVodInfo == null || mVodInfo.seriesMap == null || TextUtils.isEmpty(mVodInfo.playFlag)) return;
         List<VodInfo.VodSeries> episodes = mVodInfo.seriesMap.get(mVodInfo.playFlag);
         if (episodes == null || episodes.isEmpty()) return;
+        final int episodeCount = episodes.size();
+        final int currentPosition = Math.max(0, Math.min(mVodInfo.playIndex, episodeCount - 1));
+        final int groupStart;
+        final List<VodInfo.VodSeries> dialogEpisodes;
+        final int selectedPosition;
+        if (episodeCount > 200) {
+            int groupCount = episodeCount <= 400 ? 60 : 120;
+            groupStart = (currentPosition / groupCount) * groupCount;
+            int groupEnd = Math.min(groupStart + groupCount, episodeCount);
+            dialogEpisodes = new ArrayList<>(episodes.subList(groupStart, groupEnd));
+            selectedPosition = currentPosition - groupStart;
+        } else {
+            groupStart = 0;
+            dialogEpisodes = episodes;
+            selectedPosition = currentPosition;
+        }
         String title = TextUtils.isEmpty(mVodInfo.name) ? "选集" : mVodInfo.name + " 选集";
-        EpisodeDialog dialog = new EpisodeDialog(requireContext(), title, episodes, mVodInfo.playIndex, new EpisodeDialog.EpisodeSelectListener() {
+        EpisodeDialog dialog = new EpisodeDialog(requireContext(), title, dialogEpisodes, selectedPosition, new EpisodeDialog.EpisodeSelectListener() {
             @Override
             public void selectEpisode(int position) {
-                if (position < 0 || position >= episodes.size() || position == mVodInfo.playIndex) return;
+                int actualPosition = groupStart + position;
+                if (position < 0 || position >= dialogEpisodes.size()
+                        || actualPosition >= episodes.size() || actualPosition == mVodInfo.playIndex) return;
                 triedLineFlags.clear();
-                mVodInfo.playIndex = position;
+                mVodInfo.playIndex = actualPosition;
                 reusePlayerOnSwitch = true;
                 play(false);
             }
@@ -1955,7 +1977,7 @@ public class PlayFragment extends BaseLazyFragment {
                 }
                 AbstractPlayer mediaPlayer = mVideoView.getMediaPlayer();
                 if (mediaPlayer != null) {
-                    mVideoView.clearVideoFrame();
+                    mediaPlayer.stop();
                 }
             } else {
                 mVideoView.release();

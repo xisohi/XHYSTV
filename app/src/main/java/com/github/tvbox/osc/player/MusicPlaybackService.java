@@ -130,7 +130,6 @@ public class MusicPlaybackService extends Service {
             public void onSkipToPrevious() {
                 PlayFragment fragment = getOwner();
                 if (fragment != null) {
-                    pauseForSwitch();
                     fragment.playPrevious();
                 }
             }
@@ -139,7 +138,6 @@ public class MusicPlaybackService extends Service {
             public void onSkipToNext() {
                 PlayFragment fragment = getOwner();
                 if (fragment != null) {
-                    pauseForSwitch();
                     fragment.playNext(false);
                 }
             }
@@ -193,7 +191,6 @@ public class MusicPlaybackService extends Service {
         if (ACTION_PREVIOUS.equals(action)) {
             PlayFragment fragment = getOwner();
             if (fragment != null) {
-                pauseForSwitch();
                 fragment.playPrevious();
             }
             return;
@@ -201,7 +198,6 @@ public class MusicPlaybackService extends Service {
         if (ACTION_NEXT.equals(action)) {
             PlayFragment fragment = getOwner();
             if (fragment != null) {
-                pauseForSwitch();
                 fragment.playNext(false);
             }
             return;
@@ -270,13 +266,6 @@ public class MusicPlaybackService extends Service {
                 .setState(state, position, playing ? 1f : 0f)
                 .build());
         mediaSession.setActive(true);
-    }
-
-    private void pauseForSwitch() {
-        playing = false;
-        position = 0;
-        updateSession();
-        startForeground(NOTIFICATION_ID, buildNotification());
     }
 
     private Notification buildNotification() {

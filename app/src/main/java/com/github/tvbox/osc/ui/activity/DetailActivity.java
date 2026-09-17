@@ -141,6 +141,7 @@ public class DetailActivity extends BaseActivity {
     private View seriesFlagFocus = null;
     private boolean isReverse;
     private String preFlag="";
+    private VodInfo.VodSeries routeSwitchSeries;
     private boolean firstReverse;
     private V7GridLayoutManager mGridViewLayoutMgr = null;
     private HashMap<String, String> mCheckSources = null;
@@ -389,12 +390,14 @@ public class DetailActivity extends BaseActivity {
                     isReverse = !isReverse;
                     tvSeriesSort.setText(isReverse?"倒序":"正序");
                     vodInfo.reverse();
-                    vodInfo.playIndex=(vodInfo.seriesMap.get(vodInfo.playFlag).size()-1)-vodInfo.playIndex;
+                    if (vodInfo.playIndex >= 0) {
+                        vodInfo.playIndex=(vodInfo.seriesMap.get(vodInfo.playFlag).size()-1)-vodInfo.playIndex;
+                    }
                     firstReverse = !firstReverse;
                     setSeriesGroupOptions();
                     seriesAdapter.notifyDataSetChanged();
 
-                    customSeriesScrollPos(vodInfo.playIndex);
+                    if (vodInfo.playIndex >= 0) customSeriesScrollPos(vodInfo.playIndex);
                     if(currentSeriesGroupView != null) {
                         TextView txtView = currentSeriesGroupView.findViewById(R.id.tvSeriesFlag);
                         txtView.setTextColor(Color.WHITE);
@@ -437,12 +440,15 @@ public class DetailActivity extends BaseActivity {
                 String newFlag = seriesFlagAdapter.getData().get(position).name;
                 if (vodInfo != null && !vodInfo.playFlag.equals(newFlag)) {
                     String oldFlag = vodInfo.playFlag;
-                    int oldIndex = Math.max(vodInfo.playIndex, 0);
-                    VodInfo.VodSeries currentSeries = null;
+                    int oldIndex = vodInfo.playIndex;
+                    VodInfo.VodSeries currentSeries = getPlayingSeries(previewVodInfo, previewVodInfo == null ? null : previewVodInfo.playFlag);
                     List<VodInfo.VodSeries> oldSeriesList = vodInfo.seriesMap.get(oldFlag);
-                    if (oldSeriesList != null && !oldSeriesList.isEmpty()) {
+                    if (currentSeries == null && previewVodInfo == null && oldIndex >= 0 && oldSeriesList != null && !oldSeriesList.isEmpty()) {
                         int safeOldIndex = Math.max(0, Math.min(oldIndex, oldSeriesList.size() - 1));
                         currentSeries = oldSeriesList.get(safeOldIndex);
+                    }
+                    if (currentSeries == null) {
+                        currentSeries = routeSwitchSeries;
                     }
                     for (int i = 0; i < vodInfo.seriesFlags.size(); i++) {
                         VodInfo.VodSeriesFlag flag = vodInfo.seriesFlags.get(i);
@@ -457,17 +463,22 @@ public class DetailActivity extends BaseActivity {
                     flag.selected = true;
                     itemView.findViewById(R.id.tvSeriesFlagSelect).setVisibility(View.VISIBLE);
                     // clean pre flag select status
-                    if (oldSeriesList != null && oldSeriesList.size() > oldIndex) {
+                    if (oldSeriesList != null && oldIndex >= 0 && oldSeriesList.size() > oldIndex) {
                         oldSeriesList.get(oldIndex).selected = false;
                     }
                     vodInfo.playFlag = newFlag;
                     List<VodInfo.VodSeries> newSeriesList = vodInfo.seriesMap.get(newFlag);
                     if (newSeriesList != null && !newSeriesList.isEmpty()) {
-                        vodInfo.playIndex = findSameEpisodeIndex(currentSeries, newSeriesList, oldIndex);
+                        vodInfo.playIndex = findMatchingEpisodeIndex(currentSeries, newSeriesList);
                         for (VodInfo.VodSeries series : newSeriesList) {
                             series.selected = false;
                         }
-                        newSeriesList.get(vodInfo.playIndex).selected = true;
+                        if (vodInfo.playIndex >= 0) {
+                            newSeriesList.get(vodInfo.playIndex).selected = true;
+                            routeSwitchSeries = newSeriesList.get(vodInfo.playIndex);
+                        } else if (currentSeries != null) {
+                            routeSwitchSeries = currentSeries;
+                        }
                     }
                     refreshList();
                 }
@@ -506,6 +517,7 @@ public class DetailActivity extends BaseActivity {
                         seriesAdapter.getData().get(position).selected = true;
                         seriesAdapter.notifyItemChanged(position);
                         vodInfo.playIndex = position;
+                        routeSwitchSeries = seriesAdapter.getData().get(position);
 
                         reload = true;
                     }
@@ -558,7 +570,7 @@ public class DetailActivity extends BaseActivity {
                 if (vodInfo != null && Objects.requireNonNull(vodInfo.seriesMap.get(vodInfo.playFlag)).size() > 0) {
                     int firstVisible = mGridView.getFirstVisiblePosition();
                     int lastVisible = mGridView.getLastVisiblePosition();
-                    if (vodInfo.playIndex < firstVisible || vodInfo.playIndex > lastVisible) {
+                    if (vodInfo.playIndex >= 0 && (vodInfo.playIndex < firstVisible || vodInfo.playIndex > lastVisible)) {
                         customSeriesScrollPos(vodInfo.playIndex);
                     }
                 }
@@ -607,6 +619,7 @@ public class DetailActivity extends BaseActivity {
 
     void customSeriesScrollPos(int targetPos)
     {
+        if (targetPos < 0) return;
         mGridViewLayoutMgr.scrollToPositionWithOffset(targetPos>10?targetPos - 10:0, 0);
         mGridView.postDelayed(() -> {
             this.smoothScroller.setTargetPosition(targetPos);
@@ -676,7 +689,9 @@ public class DetailActivity extends BaseActivity {
                     break;
                 }
             }
-            if(canSelect)vodInfo.seriesMap.get(vodInfo.playFlag).get(vodInfo.playIndex).selected = true;
+            if(canSelect && vodInfo.playIndex >= 0 && vodInfo.playIndex < vodInfo.seriesMap.get(vodInfo.playFlag).size()) {
+                vodInfo.seriesMap.get(vodInfo.playFlag).get(vodInfo.playIndex).selected = true;
+            }
         }
 
         Paint pFont = new Paint();
@@ -707,7 +722,7 @@ public class DetailActivity extends BaseActivity {
             @Override
             public void run() {
 //                mGridView.smoothScrollToPosition(vodInfo.playIndex);
-                customSeriesScrollPos(vodInfo.playIndex);
+                if (vodInfo.playIndex >= 0) customSeriesScrollPos(vodInfo.playIndex);
             }
         }, 100);
     }
@@ -870,6 +885,7 @@ public class DetailActivity extends BaseActivity {
                     if (TextUtils.isEmpty(mVideo.name))mVideo.name = vod_name;
                     if (TextUtils.isEmpty(mVideo.name))mVideo.name = "TVBox";
                     vodInfo = new VodInfo();
+                    routeSwitchSeries = null;
                     if((mVideo.pic==null || mVideo.pic.isEmpty()) && !vod_picture.isEmpty()){
                         mVideo.pic=vod_picture;
                     }
@@ -1507,6 +1523,7 @@ public class DetailActivity extends BaseActivity {
                     seriesAdapter.notifyItemChanged(index);
                     if(!isFirstLoad)mGridView.setSelection(index);
                     vodInfo.playIndex = index;
+                    routeSwitchSeries = seriesAdapter.getData().get(index);
                     //保存历史
                     insertVod(firstsourceKey, vodInfo);
                     isFirstLoad = false;
@@ -1705,7 +1722,7 @@ public class DetailActivity extends BaseActivity {
         int oldIndex = vodInfo.playIndex;
         boolean sameFlag = TextUtils.equals(oldFlag, newFlag);
         VodInfo.VodSeries playingSeries = getPlayingSeries(playingVodInfo, newFlag);
-        int newIndex = findSameEpisodeIndex(playingSeries, newSeriesList, playingVodInfo.playIndex);
+        int newIndex = findMatchingEpisodeIndex(playingSeries, newSeriesList);
         vodInfo.playFlag = newFlag;
         vodInfo.playIndex = newIndex;
         if (playingVodInfo.playerCfg != null) {
@@ -1723,10 +1740,13 @@ public class DetailActivity extends BaseActivity {
                 series.selected = false;
             }
         }
-        newSeriesList.get(newIndex).selected = true;
+        if (newIndex >= 0) {
+            newSeriesList.get(newIndex).selected = true;
+            routeSwitchSeries = newSeriesList.get(newIndex);
+        }
 
         seriesFlagAdapter.notifyDataSetChanged();
-        if (sameFlag && oldIndex >= 0 && oldIndex < newSeriesList.size()) {
+        if (sameFlag && newIndex >= 0 && oldIndex >= 0 && oldIndex < newSeriesList.size()) {
             if (oldIndex != newIndex) {
                 seriesAdapter.notifyItemChanged(oldIndex);
                 seriesAdapter.notifyItemChanged(newIndex);
@@ -1734,7 +1754,9 @@ public class DetailActivity extends BaseActivity {
         } else {
             refreshList();
         }
-        setTvPlayUrl(newSeriesList.get(newIndex).url);
+        if (newIndex >= 0) {
+            setTvPlayUrl(newSeriesList.get(newIndex).url);
+        }
 
         int flagIndex = -1;
         for (int i = 0; i < vodInfo.seriesFlags.size(); i++) {
@@ -1749,7 +1771,7 @@ public class DetailActivity extends BaseActivity {
                 mGridViewFlag.setSelection(flagIndex);
             }
         }
-        if (!isFirstLoad) {
+        if (!isFirstLoad && newIndex >= 0) {
             mGridView.setSelection(newIndex);
         }
 
@@ -1902,16 +1924,18 @@ public class DetailActivity extends BaseActivity {
             exitFullPreview();
             return;
         }
-        if (seriesSelect) {
-            if (seriesFlagFocus != null && !seriesFlagFocus.isFocused()) {
-                try {
-                    if (seriesFlagFocus.isShown()) {
-                        seriesFlagFocus.requestFocus();
-                        return;
-                    }
-                } catch (Throwable th) {
-                    th.printStackTrace();
+        if (mGridView != null && mGridView.hasFocus()
+                && mGridViewFlag != null && mGridViewFlag.getVisibility() == View.VISIBLE) {
+            try {
+                if (seriesFlagFocus != null && seriesFlagFocus.isShown()
+                        && seriesFlagFocus.requestFocus()) {
+                    return;
                 }
+                if (mGridViewFlag.requestFocus()) {
+                    return;
+                }
+            } catch (Throwable th) {
+                th.printStackTrace();
             }
         }
         if(showPreview && playFragment!=null){
@@ -2003,14 +2027,16 @@ public class DetailActivity extends BaseActivity {
         if (seriesAdapter == null || vodInfo == null || vodInfo.seriesMap == null || TextUtils.isEmpty(vodInfo.playFlag)) return;
         List<VodInfo.VodSeries> list = vodInfo.seriesMap.get(vodInfo.playFlag);
         if (list == null || list.isEmpty()) return;
-        vodInfo.playIndex = Math.max(0, Math.min(vodInfo.playIndex, list.size() - 1));
+        if (vodInfo.playIndex >= list.size()) {
+            vodInfo.playIndex = list.size() - 1;
+        }
         setSeriesGroupOptions();
         mGridView.post(new Runnable() {
             @Override
             public void run() {
                 int firstVisible = mGridView.getFirstVisiblePosition();
                 int lastVisible = mGridView.getLastVisiblePosition();
-                if (vodInfo.playIndex < firstVisible || vodInfo.playIndex > lastVisible) {
+                if (vodInfo.playIndex >= 0 && (vodInfo.playIndex < firstVisible || vodInfo.playIndex > lastVisible)) {
                     customSeriesScrollPos(vodInfo.playIndex);
                 }
             }

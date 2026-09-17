@@ -4,7 +4,6 @@ import android.content.Context;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.Gravity;
-import android.view.View;
 import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
@@ -20,9 +19,14 @@ import xyz.doikki.videoplayer.player.AbstractPlayer;
 import xyz.doikki.videoplayer.player.VideoView;
 
 public class MyVideoView extends VideoView implements DrawHandler.Callback {
+    public interface DanmuSeekListener {
+        void onDanmuSeek(long position);
+    }
+
     private DanmakuView danmuView;
     private ImageView artworkView;
-    private View frameCover;
+    private DanmuSeekListener danmuSeekListener;
+
 
     public MyVideoView(@NonNull Context context) {
         super(context, null);
@@ -69,28 +73,18 @@ public class MyVideoView extends VideoView implements DrawHandler.Callback {
         return mVideoSize;
     }
 
-    public void clearVideoFrame() {
-        if (mMediaPlayer != null) mMediaPlayer.stop();
-        if (frameCover == null) {
-            frameCover = new View(getContext());
-            frameCover.setBackgroundColor(android.graphics.Color.BLACK);
-            mPlayerContainer.addView(frameCover, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT, Gravity.CENTER));
-        }
-        frameCover.setVisibility(VISIBLE);
-    }
-
-    public void showVideoFrame() {
-        if (frameCover != null) frameCover.setVisibility(GONE);
-    }
-
-    public boolean isVideoFrameCleared() {
-        return frameCover != null && frameCover.getVisibility() == VISIBLE;
+    public long getPlaybackPosition() {
+        return mCurrentPosition;
     }
 
     @Override
     public void seekTo(long pos) {
         super.seekTo(pos);
-        if (haveDanmu()) danmuView.seekTo(pos);
+        if (danmuSeekListener != null) {
+            danmuSeekListener.onDanmuSeek(pos);
+        } else if (haveDanmu()) {
+            danmuView.seekTo(pos);
+        }
     }
 
     @Override
@@ -128,6 +122,10 @@ public class MyVideoView extends VideoView implements DrawHandler.Callback {
 
     public DanmakuView getDanmuView() {
         return danmuView;
+    }
+
+    public void setDanmuSeekListener(DanmuSeekListener listener) {
+        danmuSeekListener = listener;
     }
 
     @Override
